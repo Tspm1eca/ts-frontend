@@ -820,6 +820,8 @@
                 .acu-tab-pane.active { display: block; }
                 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
                 .acu-dash-stat-row.acu-dash-changed, .acu-dash-npc-item.acu-dash-changed { border-color: var(--acu-highlight) !important; }
+                .acu-quick-view-card .acu-inline-item.acu-dash-changed, .acu-quick-view-card .acu-full-item.acu-dash-changed, .acu-quick-view-card .acu-grid-item.acu-dash-changed { border: 1px solid var(--acu-highlight, #d35400) !important; border-radius: 8px; }
+                .acu-quick-view-card .acu-inline-item.acu-dash-changed { margin: 4px 0; }
                 .acu-dash-tab-changed::after, .acu-dash-header-changed::after, .acu-nav-btn.acu-dash-nav-changed::after { content: ''; display: inline-block; width: 7px; height: 7px; margin-left: 6px; border-radius: 50%; background: var(--acu-highlight); vertical-align: middle; flex: 0 0 auto; }
 
                 .acu-quick-view-overlay { position: fixed !important; top: 0; left: 0; right: 0; bottom: 0; width: 100vw; height: 100vh; background: var(--acu-overlay-bg) !important; z-index: 2147483648 !important; display: flex !important; justify-content: center !important; align-items: center !important; backdrop-filter: blur(4px); }
@@ -2816,7 +2818,7 @@ ${allTableNames.map(tName => {
                 if (tableName && tables[tableName]) {
                      const table = tables[tableName];
                      const row = table.rows[rowIdx];
-                     if (row) showQuickView(row, table.headers, tableName, colIdx);
+                     if (row) showQuickView(row, table.headers, tableName, colIdx, rowIdx);
                 }
             });
             $('.acu-tab-btn').off('click').on('click', function(e) {
@@ -3162,13 +3164,18 @@ ${allTableNames.map(tName => {
         bindDataAreaEvents();
     };
 
-    const showQuickView = (row, headers, tableName, titleColIdx) => {
+    const showQuickView = (row, headers, tableName, titleColIdx, rowIdx) => {
         const { $ } = getCore();
         const config = getConfig();
         $('.acu-quick-view-overlay').remove();
         const codeIdx = headers.findIndex(h => h && (String(h).includes('编码') || String(h).includes('索引')));
         const savedStyles = getTableStyles();
         const currentStyle = savedStyles[tableName] || 'list';
+        let colorVal = HIGHLIGHT_COLORS[config.highlightColor];
+        if (!colorVal && config.highlightColor && String(config.highlightColor).startsWith('#')) {
+            colorVal = { main: config.highlightColor };
+        }
+        colorVal = colorVal || HIGHLIGHT_COLORS.orange;
 
         let gridHtml = ''; let fullHtml = '';
         row.forEach((cell, cIdx) => {
@@ -3179,14 +3186,16 @@ ${allTableNames.map(tName => {
                 if (displayCell === 'auto_merged') return;
                 const badgeStyle = getBadgeStyle(displayCell);
                 const contentHtml = badgeStyle ? `<span class="acu-badge ${badgeStyle}">${displayCell}</span>` : displayCell;
+                const changed = dashChangesEnabled() && rowIdx !== undefined && rowIdx !== null && cellTouched(tableName, rowIdx, cIdx);
+                const changedClass = changed ? ' acu-dash-changed' : '';
 
                 if (currentStyle === 'list' || codeIdx > 0) {
-                     fullHtml += `<div class="acu-cell acu-inline-item" style="cursor:default"><div class="acu-inline-label">${headerName}</div><div class="acu-inline-value">${contentHtml}</div></div>`;
+                     fullHtml += `<div class="acu-cell acu-inline-item${changedClass}" style="cursor:default"><div class="acu-inline-label">${headerName}</div><div class="acu-inline-value">${contentHtml}</div></div>`;
                 } else {
                      if (cellStr.length > 50) {
-                        fullHtml += `<div class="acu-cell acu-full-item" style="cursor:default"><div class="acu-full-label">${headerName}</div><div class="acu-full-value">${displayCell}</div></div>`;
+                        fullHtml += `<div class="acu-cell acu-full-item${changedClass}" style="cursor:default"><div class="acu-full-label">${headerName}</div><div class="acu-full-value">${displayCell}</div></div>`;
                      } else {
-                        gridHtml += `<div class="acu-cell acu-grid-item" style="cursor:default"><div class="acu-grid-label">${headerName}</div><div class="acu-grid-value">${contentHtml}</div></div>`;
+                        gridHtml += `<div class="acu-cell acu-grid-item${changedClass}" style="cursor:default"><div class="acu-grid-label">${headerName}</div><div class="acu-grid-value">${contentHtml}</div></div>`;
                      }
                 }
              }
@@ -3194,7 +3203,7 @@ ${allTableNames.map(tName => {
 
         const html = `
             <div class="acu-quick-view-overlay">
-                <div class="acu-quick-view-card acu-theme-${config.theme}" style="--acu-font-size: ${config.fontSize}px; font-size: ${config.fontSize}px;; --acu-text-max-height:${config.limitLongText!==false?'80px':'none'}; --acu-text-overflow:${config.limitLongText!==false?'auto':'visible'}">
+                <div class="acu-quick-view-card acu-theme-${config.theme}" style="--acu-font-size: ${config.fontSize}px; font-size: ${config.fontSize}px; --acu-highlight:${colorVal.main}; --acu-text-max-height:${config.limitLongText!==false?'80px':'none'}; --acu-text-overflow:${config.limitLongText!==false?'auto':'visible'}">
                      <div class="acu-quick-view-header">
                         <span><i class="fa-solid ${getIconForTableName(tableName)}"></i> ${row[(titleColIdx !== undefined && titleColIdx !== null) ? titleColIdx : 1] || '详情'}</span>
                         <button class="acu-header-btn" id="qv-close"><i class="fa-solid fa-times"></i></button>
