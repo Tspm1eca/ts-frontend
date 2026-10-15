@@ -2365,7 +2365,7 @@ ${allTableNames.map(tName => {
                 const label = headers[idx] || `列${idx}`;
                 if (cell !== undefined && cell !== null && String(cell).trim() !== '') {
                     const changed = dashChangesEnabled() && cellTouched(key, targetRowIdx, idx);
-                    const insertText = [toPlainInsertText(label), toPlainInsertText(cell)].filter(Boolean).join('：');
+                    const insertText = toPlainInsertText(cell);
                     itemsHtml += `
                         <div class="acu-dash-stat-row${changed ? ' acu-dash-changed' : ''}" style="display:flex; justify-content:flex-start; align-items:center; padding:8px 10px; background:var(--acu-btn-bg); border-radius:8px; border:1px solid transparent; width:100%; box-sizing:border-box;">
                             <span class="acu-dash-stat-label" style="color:var(--acu-title-color); font-size:1em; margin-right:8px; white-space:normal; overflow-wrap:break-word; flex-shrink:0; width:90px;">${label}</span>
