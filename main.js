@@ -810,6 +810,20 @@
                 .acu-dash-list-item i { font-size: 0.8em; color: var(--acu-highlight); }
 
                 .acu-dash-interactive { cursor: pointer !important; position: relative; }
+                .acu-tab-content-container .acu-dash-stat-row,
+                .acu-tab-content-container .acu-dash-npc-item { position: relative; }
+                .acu-dash-insert-btn { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; padding: 0; margin: 0; border-radius: 6px; border: 1px solid var(--acu-border); background: var(--acu-card-bg, var(--acu-btn-bg)); color: var(--acu-text-sub); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 11px; line-height: 1; z-index: 3; opacity: 0; pointer-events: none; box-shadow: 0 1px 4px var(--acu-shadow); transition: opacity 0.15s, color 0.15s, border-color 0.15s, background 0.15s; }
+                .acu-tab-content-container .acu-dash-stat-row:hover .acu-dash-insert-btn,
+                .acu-tab-content-container .acu-dash-npc-item:hover .acu-dash-insert-btn,
+                .acu-dash-insert-btn:focus-visible { opacity: 1; pointer-events: auto; }
+                .acu-dash-insert-btn:hover { color: var(--acu-highlight); border-color: var(--acu-highlight); background: var(--acu-btn-hover); }
+                .acu-tab-content-container .acu-dash-stat-row:hover { padding-right: 36px !important; }
+                .acu-tab-content-container .acu-dash-npc-item:hover { padding-right: 34px !important; }
+                @media (hover: none) {
+                    .acu-tab-content-container .acu-dash-insert-btn { opacity: 1; pointer-events: auto; }
+                    .acu-tab-content-container .acu-dash-stat-row,
+                    .acu-tab-content-container .acu-dash-npc-item { padding-right: 36px !important; }
+                }
 
 
                 .acu-tab-header { display: flex; gap: 5px; border-bottom: 1px solid var(--acu-border); margin-bottom: 10px; }
@@ -2263,6 +2277,42 @@ ${allTableNames.map(tName => {
     };
 
 
+    const toPlainInsertText = (value) => {
+        if (value === undefined || value === null) return '';
+        const holder = document.createElement('template');
+        holder.innerHTML = String(value);
+        return (holder.content.textContent || '').replace(/\u00a0/g, ' ').trim();
+    };
+
+    const dashInsertBtn = (text) => {
+        const clean = String(text || '').trim();
+        if (!clean) return '';
+        return `<button type="button" class="acu-dash-insert-btn" title="插入到输入框光标处" data-insert="${encodeURIComponent(clean)}"><i class="fa-solid fa-arrow-turn-down"></i></button>`;
+    };
+
+    // 與 Choice 插件的 insert 一致：失焦後 selectionStart/End 仍是點擊前的光標，有選區則替換。
+    const insertTextAtInputCursor = (text) => {
+        const win = window.parent || window;
+        const doc = win.document || document;
+        const ta = doc.getElementById('send_textarea') || document.getElementById('send_textarea');
+        if (!ta) {
+            const toast = win.toastr || window.toastr;
+            if (toast) toast.error('发送框不可用，无法插入');
+            return;
+        }
+        const cur = String(ta.value ?? '');
+        const pos = ta.selectionStart ?? cur.length;
+        const end = ta.selectionEnd ?? pos;
+        ta.value = cur.slice(0, pos) + text + cur.slice(end);
+        ta.dispatchEvent(new Event('input', { bubbles: true }));
+        ta.dispatchEvent(new Event('change', { bubbles: true }));
+        const caret = pos + String(text).length;
+        try {
+            ta.focus();
+            ta.setSelectionRange(caret, caret);
+        } catch (err) { /* 个别环境不允许设置选区 */ }
+    };
+
     const renderDashboard = (tables, isEmbedded = false) => {
         const config = getConfig();
         const dashConfig = ensureDashConfig(tables);
@@ -2315,10 +2365,12 @@ ${allTableNames.map(tName => {
                 const label = headers[idx] || `列${idx}`;
                 if (cell !== undefined && cell !== null && String(cell).trim() !== '') {
                     const changed = dashChangesEnabled() && cellTouched(key, targetRowIdx, idx);
+                    const insertText = [toPlainInsertText(label), toPlainInsertText(cell)].filter(Boolean).join('：');
                     itemsHtml += `
                         <div class="acu-dash-stat-row${changed ? ' acu-dash-changed' : ''}" style="display:flex; justify-content:flex-start; align-items:center; padding:8px 10px; background:var(--acu-btn-bg); border-radius:8px; border:1px solid transparent; width:100%; box-sizing:border-box;">
                             <span class="acu-dash-stat-label" style="color:var(--acu-title-color); font-size:1em; margin-right:8px; white-space:normal; overflow-wrap:break-word; flex-shrink:0; width:90px;">${label}</span>
                             <span class="acu-dash-stat-val" style="color:var(--acu-text-main); font-weight:bold; font-size:1em; white-space:pre-wrap; word-break:break-word; text-align:left;">${cell}</span>
+                            ${dashInsertBtn(insertText)}
                         </div>
                     `;
                 }
@@ -2357,7 +2409,7 @@ ${allTableNames.map(tName => {
                 if (val && String(val).trim() !== '') {
                     const flexStyle = capCols === 2 ? 'display:flex; align-items:center; justify-content:center;' : '';
                     const changed = dashChangesEnabled() && rowTouched(key, rIdx, row);
-                    itemsHtml += `<div class="acu-dash-npc-item acu-dash-interactive${changed ? ' acu-dash-changed' : ''}" data-tname="${key}" data-row="${rIdx}" data-col="${targetColIdx}" style="cursor:pointer; padding:10px 10px; background:var(--acu-table-head); border-radius:8px; border:1px solid transparent; font-size:0.9em; font-weight:500; transition:all 0.2s; ${flexStyle}">${iconHtml}${val}</div>`;
+                    itemsHtml += `<div class="acu-dash-npc-item acu-dash-interactive${changed ? ' acu-dash-changed' : ''}" data-tname="${key}" data-row="${rIdx}" data-col="${targetColIdx}" style="cursor:pointer; padding:10px 10px; background:var(--acu-table-head); border-radius:8px; border:1px solid transparent; font-size:0.9em; font-weight:500; transition:all 0.2s; ${flexStyle}">${iconHtml}${val}${dashInsertBtn(toPlainInsertText(val))}</div>`;
                 }
             });
 
@@ -2812,6 +2864,7 @@ ${allTableNames.map(tName => {
         const bindDynamicContentEvents = () => {
             $('.acu-cell').off('click').on('click', function(e) { if(isMultiSelectMode) return; e.stopPropagation(); showCellMenu(e, this); });
              $('.acu-dash-interactive').off('click').on('click', function(e) {
+                if ($(e.target).closest('.acu-dash-insert-btn').length) return;
                 e.stopPropagation();
                 const tableName = $(this).data('tname');
                 const rowIdx = $(this).data('row'); const colIdx = $(this).data('col');
@@ -2820,6 +2873,19 @@ ${allTableNames.map(tName => {
                      const row = table.rows[rowIdx];
                      if (row) showQuickView(row, table.headers, tableName, colIdx, rowIdx);
                 }
+            });
+            $('.acu-dash-insert-btn').off('mousedown.acu_insert click.acu_insert');
+            $('.acu-dash-insert-btn').on('mousedown.acu_insert', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            });
+            $('.acu-dash-insert-btn').on('click.acu_insert', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                let text = '';
+                try { text = decodeURIComponent($(this).attr('data-insert') || ''); } catch (err) { text = ''; }
+                if (!text) return;
+                insertTextAtInputCursor(text);
             });
             $('.acu-tab-btn').off('click').on('click', function(e) {
                  e.stopPropagation();
