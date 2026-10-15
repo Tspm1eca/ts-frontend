@@ -815,14 +815,26 @@
                 .acu-dash-insert-btn { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; padding: 0; margin: 0; border-radius: 6px; border: 1px solid var(--acu-border); background: var(--acu-card-bg, var(--acu-btn-bg)); color: var(--acu-text-sub); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 11px; line-height: 1; z-index: 3; opacity: 0; pointer-events: none; box-shadow: 0 1px 4px var(--acu-shadow); transition: opacity 0.15s, color 0.15s, border-color 0.15s, background 0.15s; }
                 .acu-tab-content-container .acu-dash-stat-row:hover .acu-dash-insert-btn,
                 .acu-tab-content-container .acu-dash-npc-item:hover .acu-dash-insert-btn,
+                .acu-quick-view-body .acu-qv-row:hover .acu-dash-insert-btn,
                 .acu-dash-insert-btn:focus-visible { opacity: 1; pointer-events: auto; }
                 .acu-dash-insert-btn:hover { color: var(--acu-highlight); border-color: var(--acu-highlight); background: var(--acu-btn-hover); }
                 .acu-tab-content-container .acu-dash-stat-row:hover { padding-right: 36px !important; }
                 .acu-tab-content-container .acu-dash-npc-item:hover { padding-right: 34px !important; }
+                .acu-qv-row { position: relative; min-width: 0; }
+                .acu-quick-view-body .acu-qv-row > .acu-inline-item,
+                .acu-quick-view-body .acu-qv-row > .acu-full-item,
+                .acu-quick-view-body .acu-qv-row > .acu-grid-item { box-sizing: border-box; }
+                .acu-quick-view-body .acu-qv-row:hover > .acu-inline-item,
+                .acu-quick-view-body .acu-qv-row:hover > .acu-full-item,
+                .acu-quick-view-body .acu-qv-row:hover > .acu-grid-item { padding-right: 34px; }
                 @media (hover: none) {
-                    .acu-tab-content-container .acu-dash-insert-btn { opacity: 1; pointer-events: auto; }
+                    .acu-tab-content-container .acu-dash-insert-btn,
+                    .acu-quick-view-body .acu-dash-insert-btn { opacity: 1; pointer-events: auto; }
                     .acu-tab-content-container .acu-dash-stat-row,
                     .acu-tab-content-container .acu-dash-npc-item { padding-right: 36px !important; }
+                    .acu-quick-view-body .acu-inline-item,
+                    .acu-quick-view-body .acu-full-item,
+                    .acu-quick-view-body .acu-grid-item { padding-right: 34px; }
                 }
 
 
@@ -911,6 +923,8 @@
 
                 .acu-inline-item { display: block; padding: 2px 8px; border-bottom: 1px dashed var(--acu-border); cursor: pointer; max-height: var(--acu-text-max-height, 80px); overflow-y: var(--acu-text-overflow, auto); scrollbar-width: none; }
                 .acu-inline-item:last-child { border-bottom: none; }
+                .acu-quick-view-body .acu-inline-item { border-bottom: 1px dashed var(--acu-border); }
+                .acu-quick-view-body .acu-card-full-area > .acu-qv-row:last-child .acu-inline-item { border-bottom: none; }
                 .acu-inline-item:hover { background: var(--acu-table-hover); }
                 .acu-inline-label { display: inline; color: var(--acu-title-color); font-weight: bold; font-size: var(--acu-font-size, 13px); line-height: 1.4; margin-right: 4px; }
                 .acu-inline-label::after { content: '：'; }
@@ -2875,11 +2889,12 @@ ${allTableNames.map(tName => {
                 }
             });
             $('.acu-dash-insert-btn').off('mousedown.acu_insert click.acu_insert');
-            $('.acu-dash-insert-btn').on('mousedown.acu_insert', function(e) {
+            $('body').off('mousedown.acu_insert click.acu_insert', '.acu-dash-insert-btn');
+            $('body').on('mousedown.acu_insert', '.acu-dash-insert-btn', function(e) {
                 e.preventDefault();
                 e.stopPropagation();
             });
-            $('.acu-dash-insert-btn').on('click.acu_insert', function(e) {
+            $('body').on('click.acu_insert', '.acu-dash-insert-btn', function(e) {
                 e.preventDefault();
                 e.stopPropagation();
                 let text = '';
@@ -3254,14 +3269,15 @@ ${allTableNames.map(tName => {
                 const contentHtml = badgeStyle ? `<span class="acu-badge ${badgeStyle}">${displayCell}</span>` : displayCell;
                 const changed = dashChangesEnabled() && rowIdx !== undefined && rowIdx !== null && cellTouched(tableName, rowIdx, cIdx);
                 const changedClass = changed ? ' acu-dash-changed' : '';
+                const insertBtn = dashInsertBtn(toPlainInsertText(displayCell));
 
                 if (currentStyle === 'list' || codeIdx > 0) {
-                     fullHtml += `<div class="acu-cell acu-inline-item${changedClass}" style="cursor:default"><div class="acu-inline-label">${headerName}</div><div class="acu-inline-value">${contentHtml}</div></div>`;
+                     fullHtml += `<div class="acu-qv-row"><div class="acu-cell acu-inline-item${changedClass}" style="cursor:default"><div class="acu-inline-label">${headerName}</div><div class="acu-inline-value">${contentHtml}</div></div>${insertBtn}</div>`;
                 } else {
                      if (cellStr.length > 50) {
-                        fullHtml += `<div class="acu-cell acu-full-item${changedClass}" style="cursor:default"><div class="acu-full-label">${headerName}</div><div class="acu-full-value">${displayCell}</div></div>`;
+                        fullHtml += `<div class="acu-qv-row"><div class="acu-cell acu-full-item${changedClass}" style="cursor:default"><div class="acu-full-label">${headerName}</div><div class="acu-full-value">${displayCell}</div></div>${insertBtn}</div>`;
                      } else {
-                        gridHtml += `<div class="acu-cell acu-grid-item${changedClass}" style="cursor:default"><div class="acu-grid-label">${headerName}</div><div class="acu-grid-value">${contentHtml}</div></div>`;
+                        gridHtml += `<div class="acu-qv-row"><div class="acu-cell acu-grid-item${changedClass}" style="cursor:default"><div class="acu-grid-label">${headerName}</div><div class="acu-grid-value">${contentHtml}</div></div>${insertBtn}</div>`;
                      }
                 }
              }
