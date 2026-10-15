@@ -44,6 +44,17 @@
 
     let hideOptionsUntilUpdate = false;
     let lastOptionDataCheck = '';
+    let renderLock = 0;
+    let anchorTimer = null;
+    let anchorWantRebuild = false;
+    let lastAnchorRebuildAt = 0;
+    let turnBaselineFrozen = false;
+    let unfreezeTimer = null;
+    let stBindTimer = null;
+    let stBindTries = 0;
+    let stUnsubs = [];
+    let lastEmbeddedDashPayload = null;
+    let lastEmbeddedOptPayload = null;
 
     const UpdateController = {
         _suppressNext: false,
@@ -253,6 +264,16 @@
     const saveSnapshot = (data) => {
         if (!snapshotHasSheets(data)) return;
         try { localStorage.setItem(STORAGE_KEY_LAST_SNAPSHOT, JSON.stringify(data)); } catch (e) { console.error(e); }
+    };
+
+    // 使用者送出／生成開始時凍結「回覆前」的表格，這一輪只高亮相對這份快照的差異。
+    const freezeTurnBaseline = () => {
+        if (stopped || turnBaselineFrozen) return;
+        const db = getCore().getDB();
+        const data = db?.exportTableAsJson?.();
+        if (!snapshotHasSheets(data)) return;
+        saveSnapshot(data);
+        turnBaselineFrozen = true;
     };
 
     const generateDiffMap = (currentData) => {
@@ -1848,29 +1869,31 @@ ${allTableNames.map(tName => {
     };
 
 
+    const getLatestAiMessageBlock = ($) => {
+        const $allMes = $('#chat .mes');
+        const $aiMes = $allMes.filter(function() {
+            const $this = $(this);
+            if ($this.attr('is_user') === 'true' || $this.attr('is_system') === 'true' || $this.hasClass('sys_mes')) return false;
+            if ($this.find('.name_text').text().trim() === 'System') return false;
+            if ($this.css('display') === 'none') return false;
+            return true;
+        });
+        if ($aiMes.length === 0) return $();
+        const $targetMes = $aiMes.last();
+        const $targetBlock = $targetMes.find('.mes_block');
+        return $targetBlock.length ? $targetBlock : $targetMes;
+    };
+
     const injectEmbeddedDashboard = (htmlContent, themeClass, cssVars) => {
         const { $ } = getCore();
         if (!htmlContent) {
+            lastEmbeddedDashPayload = null;
             $('.acu-embedded-dashboard-container').remove();
             return;
         }
+        lastEmbeddedDashPayload = { htmlContent, themeClass, cssVars };
 
-        const getTargetContainer = () => {
-            const $allMes = $('#chat .mes');
-            const $aiMes = $allMes.filter(function() {
-                const $this = $(this);
-                if ($this.attr('is_user') === 'true' || $this.attr('is_system') === 'true' || $this.hasClass('sys_mes')) return false;
-                if ($this.find('.name_text').text().trim() === 'System') return false;
-                if ($this.css('display') === 'none') return false;
-                return true;
-            });
-            if ($aiMes.length === 0) return null;
-            const $targetMes = $aiMes.last();
-            const $targetBlock = $targetMes.find('.mes_block');
-            return $targetBlock.length ? $targetBlock : $targetMes;
-        };
-
-        const $target = getTargetContainer();
+        const $target = getLatestAiMessageBlock($);
         if ($target && $target.length) {
             const $existing = $('.acu-embedded-dashboard-container');
             let shouldUpdate = false;
@@ -1992,8 +2015,6 @@ ${allTableNames.map(tName => {
                 const $opts = $target.find('.acu-embedded-options-container');
                 if ($opts.length) { $opts.before($container); } else { $target.append($container); }
             }
-        } else {
-            $('.acu-embedded-dashboard-container').remove();
         }
     };
 
@@ -2001,27 +2022,13 @@ ${allTableNames.map(tName => {
     const injectIndependentOptions = (htmlContent, themeClass, cssVars) => {
         const { $ } = getCore();
         if (!htmlContent) {
+            lastEmbeddedOptPayload = null;
             $('.acu-embedded-options-container').remove();
             return;
         }
+        lastEmbeddedOptPayload = { htmlContent, themeClass, cssVars };
 
-        const getTargetContainer = () => {
-            const $allMes = $('#chat .mes');
-            const $aiMes = $allMes.filter(function() {
-                const $this = $(this);
-                if ($this.attr('is_user') === 'true' || $this.attr('is_system') === 'true' || $this.hasClass('sys_mes')) return false;
-                if ($this.find('.name_text').text().trim() === 'System') return false;
-                if ($this.css('display') === 'none') return false;
-                return true;
-            });
-            if ($aiMes.length === 0) return null;
-
-            const $targetMes = $aiMes.last();
-            const $targetBlock = $targetMes.find('.mes_block');
-            return $targetBlock.length ? $targetBlock : $targetMes;
-        };
-
-        const $target = getTargetContainer();
+        const $target = getLatestAiMessageBlock($);
         if ($target && $target.length) {
             const $existing = $('.acu-embedded-options-container');
             let shouldUpdate = false;
@@ -2105,14 +2112,13 @@ ${allTableNames.map(tName => {
 
                 $target.append($container);
             }
-        } else {
-             $('.acu-embedded-options-container').remove();
         }
     };
 
     const renderInterface = (forceRefresh = false) => {
         const { $ } = getCore();
         if (!$) return;
+        renderLock++;
         try {
              const $lastPanel = $('.acu-panel-content');
             if ($lastPanel.length) { globalScrollTop = $lastPanel.scrollTop(); }
@@ -2291,6 +2297,7 @@ ${allTableNames.map(tName => {
             }
             if (isEditingOrder) initSortable();
         } catch(e) { console.error("UI Render Error:", e); }
+        finally { renderLock--; }
     };
 
 
@@ -2576,6 +2583,126 @@ ${allTableNames.map(tName => {
         return html;
     };
 
+    const placeChatAnchors = () => {
+        const { $ } = getCore();
+        if (!$) return false;
+        const config = getConfig();
+        const $chat = $('#chat');
+        if (!$chat.length) return false;
+
+        const $wrapper = $('.acu-wrapper');
+        if ($wrapper.length) {
+            if (config.frontendPosition === 'message') {
+                const $lastMes = $chat.find('.mes').last();
+                if ($lastMes.length) {
+                    const $block = $lastMes.find('.mes_block').length ? $lastMes.find('.mes_block') : $lastMes;
+                    if ($block.children().last()[0] !== $wrapper[0]) $block.append($wrapper);
+                }
+            } else {
+                const lastChild = $chat.children().last()[0];
+                if (lastChild && lastChild !== $wrapper[0] && ($(lastChild).hasClass('mes') || $(lastChild).hasClass('message-body'))) {
+                    $chat.append($wrapper);
+                }
+            }
+        }
+
+        const $aiBlock = getLatestAiMessageBlock($);
+        if ($aiBlock.length) {
+            const $dash = $('.acu-embedded-dashboard-container');
+            const $opts = $('.acu-embedded-options-container');
+            if ($dash.length && $dash.parent()[0] !== $aiBlock[0]) {
+                if ($opts.length && $opts.parent()[0] === $aiBlock[0]) $opts.before($dash);
+                else $aiBlock.append($dash);
+            }
+            if ($opts.length && $opts.parent()[0] !== $aiBlock[0]) $aiBlock.append($opts);
+            if (!$('.acu-embedded-dashboard-container').length && lastEmbeddedDashPayload && config.showDashboard !== false && config.dashboardPosition === 'embedded') {
+                injectEmbeddedDashboard(lastEmbeddedDashPayload.htmlContent, lastEmbeddedDashPayload.themeClass, lastEmbeddedDashPayload.cssVars);
+            }
+            if (!$('.acu-embedded-options-container').length && lastEmbeddedOptPayload && config.showOptionPanel !== false) {
+                injectIndependentOptions(lastEmbeddedOptPayload.htmlContent, lastEmbeddedOptPayload.themeClass, lastEmbeddedOptPayload.cssVars);
+            }
+        }
+
+        const wantDash = config.showDashboard !== false && config.dashboardPosition === 'embedded';
+        const dashMissing = wantDash && $aiBlock.length && !$('.acu-embedded-dashboard-container').length;
+        return !$('.acu-wrapper').length || dashMissing;
+    };
+
+    const scheduleChatAnchorSync = (opts = {}) => {
+        if (stopped) return;
+        if (opts.rebuild) anchorWantRebuild = true;
+        const delay = opts.delay != null ? opts.delay : (anchorWantRebuild ? 350 : 80);
+        clearTimeout(anchorTimer);
+        anchorTimer = setTimeout(() => {
+            anchorTimer = null;
+            if (stopped) return;
+            if (renderLock > 0) {
+                scheduleChatAnchorSync();
+                return;
+            }
+            const rebuild = anchorWantRebuild;
+            anchorWantRebuild = false;
+            if (rebuild) {
+                renderInterface(true);
+                return;
+            }
+            if (placeChatAnchors()) {
+                if (Date.now() - lastAnchorRebuildAt < 800) return;
+                lastAnchorRebuildAt = Date.now();
+                renderInterface(false);
+            }
+        }, delay);
+    };
+
+    const releaseTurnBaseline = () => {
+        clearTimeout(unfreezeTimer);
+        unfreezeTimer = setTimeout(() => {
+            unfreezeTimer = null;
+            turnBaselineFrozen = false;
+        }, 1200);
+    };
+
+    const bindSillyTavernLifecycle = () => {
+        if (stopped || stUnsubs.length) return;
+        const w = window.parent || window;
+        let ctx = null;
+        try {
+            ctx = w.SillyTavern?.getContext?.() || (typeof w.getContext === 'function' ? w.getContext() : null);
+        } catch (e) { ctx = null; }
+        const es = ctx?.eventSource;
+        if (!es?.on) {
+            if (stBindTries++ < 15) stBindTimer = setTimeout(bindSillyTavernLifecycle, 1000);
+            return;
+        }
+        const types = ctx.event_types || {};
+        const listen = (name, fn) => {
+            if (!name) return;
+            es.on(name, fn);
+            stUnsubs.push({ es, name, fn });
+        };
+        const onSend = () => freezeTurnBaseline();
+        const onSettled = () => {
+            scheduleChatAnchorSync({ rebuild: true, delay: 450 });
+            releaseTurnBaseline();
+        };
+        listen(types.MESSAGE_SENT || 'message_sent', onSend);
+        listen(types.GENERATION_STARTED || 'generation_started', onSend);
+        listen(types.GENERATION_ENDED || 'generation_ended', onSettled);
+        listen(types.MESSAGE_RECEIVED || 'message_received', onSettled);
+        listen(types.CHARACTER_MESSAGE_RENDERED || 'character_message_rendered', () => scheduleChatAnchorSync());
+        listen(types.USER_MESSAGE_RENDERED || 'user_message_rendered', () => scheduleChatAnchorSync());
+        listen(types.MESSAGE_SWIPED || 'message_swiped', () => scheduleChatAnchorSync());
+        listen(types.MESSAGE_DELETED || 'message_deleted', () => scheduleChatAnchorSync());
+        listen(types.CHAT_CHANGED || 'chat_id_changed', () => {
+            turnBaselineFrozen = false;
+            const db = getCore().getDB();
+            const data = db?.exportTableAsJson?.();
+            if (snapshotHasSheets(data)) saveSnapshot(data);
+            currentDiffMap.clear();
+            scheduleChatAnchorSync({ rebuild: true, delay: 200 });
+        });
+    };
+
     const insertHtmlToPage = (html) => {
         const { $ } = getCore();
         const $chat = $('#chat');
@@ -2598,33 +2725,8 @@ ${allTableNames.map(tName => {
         }
 
         if (observer) observer.disconnect();
-        observer = new MutationObserver((mutations) => {
-            const currentConfig = getConfig();
-            const $chatNode = $('#chat');
-            const $wrapper = $('.acu-wrapper');
-
-            if (!$chatNode.length || !$wrapper.length) return;
-
-            if (currentConfig.frontendPosition === 'message') {
-                const $lastMes = $chatNode.find('.mes').last();
-                if ($lastMes.length) {
-                    const $targetBlock = $lastMes.find('.mes_block').length ? $lastMes.find('.mes_block') : $lastMes;
-                    if (!$targetBlock.find('.acu-wrapper').length) {
-                         $targetBlock.append($wrapper);
-                    }
-                    else if ($targetBlock.children().last()[0] !== $wrapper[0]) {
-                         $targetBlock.append($wrapper);
-                    }
-                }
-            } else {
-                const children = $chatNode.children();
-                const lastChild = children.last()[0];
-                if (lastChild && lastChild !== $wrapper[0]) {
-                    if ($(lastChild).hasClass('mes') || $(lastChild).hasClass('message-body')) {
-                        $chatNode.append($wrapper);
-                    }
-                }
-            }
+        observer = new MutationObserver(() => {
+            scheduleChatAnchorSync();
         });
 
         if ($chat.length) {
@@ -3835,6 +3937,18 @@ ${allTableNames.map(tName => {
         stopped = true;
         clearTimeout(waitTimer);
         waitTimer = null;
+        clearTimeout(anchorTimer);
+        anchorTimer = null;
+        clearTimeout(unfreezeTimer);
+        unfreezeTimer = null;
+        clearTimeout(stBindTimer);
+        stBindTimer = null;
+        stUnsubs.forEach(({ es, name, fn }) => {
+            try { es.removeListener(name, fn); } catch (e) {
+                try { es.off?.(name, fn); } catch (e2) { /* already gone */ }
+            }
+        });
+        stUnsubs = [];
         clearTimeout(UpdateController._resetTimer);
         clearTimeout(UpdateController._silentTimer);
         UpdateController._resetTimer = null;
@@ -3887,12 +4001,13 @@ ${allTableNames.map(tName => {
                      db.registerTableUpdateCallback(UpdateController.handleUpdate);
                      if (db.registerTableFillStartCallback) {
                          db.registerTableFillStartCallback(() => {
-                             if (stopped) return;
+                             if (stopped || turnBaselineFrozen) return;
                              const c = db.exportTableAsJson();
                              if (c) saveSnapshot(c);
                          });
                      }
                  }
+                 bindSillyTavernLifecycle();
                  isInitialized = true;
              } else {
                  waitTimer = setTimeout(loop, 1000);
