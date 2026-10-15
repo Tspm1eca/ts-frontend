@@ -28,6 +28,7 @@
     let isSaving = false;
     let isEditingOrder = false;
     let currentDiffMap = new Set();
+    let lastAnnouncedDiff = '';
     let observer = null;
     let stopped = false;
     let waitTimer = null;
@@ -103,6 +104,7 @@
         frontendPosition: 'bottom',
         dashboardPosition: 'embedded',
         dashboardDefaultExpanded: false,
+        dashboardHighlightChanges: true,
         dbTheme: 'default',
         dbTransparentMap: {}
     };
@@ -267,6 +269,117 @@
             });
         }
         return diffSet;
+    };
+
+    const dashChangesEnabled = () => getConfig().dashboardHighlightChanges !== false;
+
+    const dashDiffSignature = () => Array.from(currentDiffMap).sort().join('\n');
+
+    const cellTouched = (tableName, rowIdx, colIdx) => {
+        if (currentDiffMap.has(`${tableName}-row-${rowIdx}`)) return true;
+        return currentDiffMap.has(`${tableName}-${rowIdx}-${colIdx}`);
+    };
+
+    const rowTouched = (tableName, rowIdx, row) => {
+        if (currentDiffMap.has(`${tableName}-row-${rowIdx}`)) return true;
+        if (!row) return false;
+        for (let c = 1; c < row.length; c++) {
+            if (currentDiffMap.has(`${tableName}-${rowIdx}-${c}`)) return true;
+        }
+        return false;
+    };
+
+    const slotShowsChange = (tables, cfg) => {
+        if (!dashChangesEnabled() || !cfg || cfg.isEmpty || !cfg.text || !tables) return false;
+        const key = Object.keys(tables).find(k => k.includes(cfg.text));
+        const table = key ? tables[key] : null;
+        if (!table || !table.rows || !table.rows.length) return false;
+
+        if (cfg.rule === 'kv') {
+            let idx = 0;
+            if (cfg.card) {
+                const foundIdx = table.rows.findIndex(r => r[1] === cfg.card);
+                if (foundIdx >= 0) idx = foundIdx;
+            }
+            const row = table.rows[idx];
+            if (!row) return false;
+            const colsToShow = (cfg.showCols && cfg.showCols.length > 0) ? cfg.showCols.map(Number) : null;
+            for (let i = 1; i < row.length; i++) {
+                if (colsToShow && !colsToShow.includes(i)) continue;
+                const cell = row[i];
+                if (cell === undefined || cell === null || String(cell).trim() === '') continue;
+                if (cellTouched(key, idx, i)) return true;
+            }
+            return false;
+        }
+
+        const targetColIdx = (cfg.capCol !== undefined && cfg.capCol !== null) ? parseInt(cfg.capCol, 10) : 1;
+        return table.rows.some((row, rIdx) => {
+            const val = row[targetColIdx];
+            if (val === undefined || val === null || String(val).trim() === '') return false;
+            return rowTouched(key, rIdx, row);
+        });
+    };
+
+    const dashboardHasChanges = (tables) => {
+        if (!dashChangesEnabled() || !tables) return false;
+        const dashConfig = getDashConfig() || {};
+        return Object.keys(dashConfig).some(id => slotShowsChange(tables, dashConfig[id]));
+    };
+
+    const ensureDashConfig = (tables) => {
+        const dashConfig = getDashConfig() || {};
+        if (!tables) return dashConfig;
+        let changed = false;
+        const autoSetup = [
+            { id: 'slot_2_1', kw: '主角信息', rule: 'kv' },
+            { id: 'slot_3_1', kw: '全局数据', rule: 'kv' },
+            { id: 'slot_4_1', kw: '重要角色', rule: 'capsule', col: 1 },
+            { id: 'slot_5_1', kw: '背包', rule: 'capsule', col: 1 },
+            { id: 'slot_5_2', kw: '技能', rule: 'capsule', col: 1 },
+            { id: 'slot_6_1', kw: '任务', rule: 'capsule', col: 1, capCols: 2 },
+            { id: 'slot_6_2', kw: '地点', rule: 'capsule', col: 1, capCols: 2 }
+        ];
+        autoSetup.forEach(s => {
+            if (!dashConfig[s.id]) {
+                const k = Object.keys(tables).find(name => name.includes(s.kw));
+                if (k && tables[k]) {
+                    const t = tables[k];
+                    const entry = { isEmpty: false, title: (k.endsWith('表') ? k.slice(0, -1) : k), text: k, rule: s.rule };
+                    let valid = false;
+                    if (s.rule === 'kv') {
+                        if (t.rows && t.rows.length) { entry.card = t.rows[0][1]; }
+                        if (s.cols) entry.showCols = s.cols;
+                        valid = true;
+                    } else if (s.rule === 'capsule') {
+                        entry.capCol = s.col;
+                        if (s.capCols) entry.capCols = s.capCols;
+                        valid = true;
+                    }
+                    if (valid) { dashConfig[s.id] = entry; changed = true; }
+                }
+            }
+        });
+        if (changed) saveDashConfig(dashConfig);
+        return dashConfig;
+    };
+
+    const applyEmbeddedChangeHint = ($container) => {
+        if (!$container || !$container.length) return;
+        const changed = $container.find('.acu-dash-changed, .acu-dash-tab-changed').length > 0;
+        $container.find('.acu-dash-ctrl-title').toggleClass('acu-dash-header-changed', changed);
+        const sig = dashDiffSignature();
+        if (!sig) {
+            lastAnnouncedDiff = '';
+            return;
+        }
+        if (!dashChangesEnabled() || !changed || sig === lastAnnouncedDiff) return;
+        lastAnnouncedDiff = sig;
+        const $wrapper = $container.find('.acu-dash-content-wrapper');
+        const $header = $container.find('.acu-dash-ctrl-bar');
+        $wrapper.css({ 'height': (window.innerWidth <= 768 ? 'auto' : '500px'), 'opacity': '1', 'padding': '0' });
+        $header.css({ 'border-radius': '12px 12px 0 0', 'margin-bottom': '-1px' });
+        $container.find('#acu-btn-dash-edit-emb').css('display', 'inline-flex');
     };
 
     const injectDatabaseStyles = (config) => {
@@ -706,6 +819,10 @@
                 .acu-tab-pane { display: none; animation: fadeIn 0.3s; }
                 .acu-tab-pane.active { display: block; }
                 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+                .acu-dash-stat-row.acu-dash-changed, .acu-dash-npc-item.acu-dash-changed { color: var(--acu-highlight) !important; background-color: var(--acu-highlight-bg) !important; border-color: var(--acu-highlight) !important; box-shadow: inset 0 0 0 1px var(--acu-highlight); animation: pulse-highlight 2s infinite; }
+                .acu-dash-stat-val.acu-dash-changed { color: var(--acu-highlight) !important; background-color: var(--acu-highlight-bg); border-radius: 4px; padding: 0 4px; }
+                .acu-tab-btn.acu-dash-tab-changed { color: var(--acu-highlight) !important; background: var(--acu-highlight-bg); border-radius: 4px 4px 0 0; }
+                .acu-dash-tab-changed::after, .acu-dash-header-changed::after, .acu-nav-btn.acu-dash-nav-changed::after { content: ''; display: inline-block; width: 7px; height: 7px; margin-left: 6px; border-radius: 50%; background: var(--acu-highlight); box-shadow: 0 0 6px var(--acu-highlight); animation: pulse-highlight 1.2s infinite; vertical-align: middle; flex: 0 0 auto; }
 
                 .acu-quick-view-overlay { position: fixed !important; top: 0; left: 0; right: 0; bottom: 0; width: 100vw; height: 100vh; background: var(--acu-overlay-bg) !important; z-index: 2147483648 !important; display: flex !important; justify-content: center !important; align-items: center !important; backdrop-filter: blur(4px); }
                 .acu-quick-view-card { background: var(--acu-card-bg); border-radius: 12px; border: 1px solid var(--acu-border); box-shadow: 0 15px 50px var(--acu-shadow); width: 90%; max-width: 450px; max-height: 80vh; display: flex; flex-direction: column; overflow: hidden; animation: popUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); color: var(--acu-text-main); }
@@ -1466,6 +1583,15 @@
                                     </label>
                                 </div>
                             </div>
+<div class="acu-control-row" id="row-dash-highlight">
+                                <div class="acu-label-col"><span class="acu-label-main">变更高亮</span></div>
+                                <div class="acu-input-col">
+                                    <label class="acu-switch">
+                                        <input type="checkbox" id="cfg-dash-highlight" ${config.dashboardHighlightChanges !== false ? 'checked' : ''}>
+                                        <span class="acu-slider-switch"></span>
+                                    </label>
+                                </div>
+                            </div>
                             <div class="acu-control-row">
                                 <div class="acu-label-col"><span class="acu-label-main">仪表盘字体大小</span></div>
                                 <div class="acu-input-col">
@@ -1587,6 +1713,12 @@ ${allTableNames.map(tName => {
         dialog.find('#cfg-dash-default-expand').on('change', function() {
             saveConfig({ dashboardDefaultExpanded: $(this).is(':checked') });
             $('.acu-embedded-dashboard-container').remove();
+            renderInterface(false);
+        });
+        dialog.find('#cfg-dash-highlight').on('change', function() {
+            const checked = $(this).is(':checked');
+            if (checked) lastAnnouncedDiff = '';
+            saveConfig({ dashboardHighlightChanges: checked });
             renderInterface(false);
         });
         dialog.find('#cfg-show-option').on('change', function() {
@@ -1750,6 +1882,7 @@ ${allTableNames.map(tName => {
                         $editBtn.css('display', 'inline-flex');
                     }
                 }
+                applyEmbeddedChangeHint($container);
             } else {
                 // 首次创建或位置变更：编辑模式强制展开，否则按「默认展开」配置
                 let isCollapsed = !getConfig().dashboardDefaultExpanded;
@@ -1775,7 +1908,7 @@ ${allTableNames.map(tName => {
                     ">
                         <div style="display:flex; align-items:center; gap:8px;">
                              <i class="fa-solid fa-tachometer-alt" style="color:var(--acu-highlight);"></i>
-                             <span style="font-weight: bold; color: var(--acu-title-color); font-size: 13px;">仪表盘</span>
+                             <span class="acu-dash-ctrl-title" style="font-weight: bold; color: var(--acu-title-color); font-size: 13px;">仪表盘</span>
                         </div>
                         <div style="display:flex; align-items:center; gap:8px;">
                             <button id="acu-btn-dash-edit-emb" title="编辑布局" style="background:transparent; border:none; color:var(--acu-text-sub); cursor:pointer; padding:0 4px; height:16px; display:${isCollapsed ? 'none' : 'inline-flex'}; align-items:center;"><i class="fa-solid ${isDashEditing ? 'fa-check' : 'fa-edit'}" style="${isDashEditing ? 'color:var(--acu-highlight)' : ''}"></i></button>
@@ -1822,6 +1955,8 @@ ${allTableNames.map(tName => {
                         $container.find('#acu-btn-dash-edit-emb').hide();
                     }
                 });
+
+                applyEmbeddedChangeHint($container);
 
                 const $opts = $target.find('.acu-embedded-options-container');
                 if ($opts.length) { $opts.before($container); } else { $target.append($container); }
@@ -2076,6 +2211,8 @@ ${allTableNames.map(tName => {
                  else optGridCols = 4;
             }
             const cssVars = `--acu-opt-cols:repeat(${optGridCols}, 1fr); --acu-card-width:${config.cardWidth}px; --acu-font-size:${config.fontSize}px; --acu-opt-font-size:${config.optionFontSize || 13}px; --acu-dash-font-size:${config.dashboardFontSize || 13}px; --acu-highlight:${colorVal.main}; --acu-highlight-bg:${colorVal.bg}; --acu-accent:${colorVal.main}; --acu-title-color:${titleColorVal}; --acu-nav-cols:${gridCols}; --acu-text-max-height:${config.limitLongText!==false?'80px':'none'}; --acu-text-overflow:${config.limitLongText!==false?'auto':'visible'}`;
+            if (showDash) ensureDashConfig(tables);
+            const dashChanged = !!(showDash && dashboardHasChanges(tables));
 
             let html = `
                 <div class="acu-wrapper acu-theme-${config.theme}" style="${cssVars}">
@@ -2085,7 +2222,7 @@ ${allTableNames.map(tName => {
                     <div class="acu-nav-container ${isCollapsed ? 'collapsed' : ''} ${isEditingOrder ? 'editing-order' : ''} acu-collapse-${collapseStyle} acu-pill-${collapsePos}" id="acu-nav-bar">
                         ${orderControlsHtml}
                         <div class="acu-nav-tabs-area">
-                            ${(showDash && config.dashboardPosition === 'panel') ? `<button class="acu-nav-btn ${currentTabName === TAB_DASHBOARD ? 'active' : ''}" data-table="${TAB_DASHBOARD}"><i class="fa-solid fa-tachometer-alt"></i><span>仪表盘</span></button>` : ''}
+                            ${(showDash && config.dashboardPosition === 'panel') ? `<button class="acu-nav-btn ${currentTabName === TAB_DASHBOARD ? 'active' : ''} ${dashChanged ? 'acu-dash-nav-changed' : ''}" data-table="${TAB_DASHBOARD}"><i class="fa-solid fa-tachometer-alt"></i><span>仪表盘</span></button>` : ''}
             `;
             orderedNames.forEach(name => {
                 if (hiddenTables.includes(name)) return;
@@ -2128,7 +2265,7 @@ ${allTableNames.map(tName => {
 
     const renderDashboard = (tables, isEmbedded = false) => {
         const config = getConfig();
-        const dashConfig = getDashConfig() || {};
+        const dashConfig = ensureDashConfig(tables);
 
         const defaults = {
             'slot_1_1': {isEmpty:true}, 'slot_1_2': {isEmpty:true},
@@ -2146,38 +2283,6 @@ ${allTableNames.map(tName => {
             return Object.keys(tables).find(k => exact ? k === keyword : k.includes(keyword));
         };
 
-        let _cfgChanged = false;
-        const _autoSetup = [
-            { id: 'slot_2_1', kw: '主角信息', rule: 'kv' },
-            { id: 'slot_3_1', kw: '全局数据', rule: 'kv' },
-            { id: 'slot_4_1', kw: '重要角色', rule: 'capsule', col: 1 },
-            { id: 'slot_5_1', kw: '背包', rule: 'capsule', col: 1 },
-            { id: 'slot_5_2', kw: '技能', rule: 'capsule', col: 1 },
-            { id: 'slot_6_1', kw: '任务', rule: 'capsule', col: 1, capCols: 2 },
-            { id: 'slot_6_2', kw: '地点', rule: 'capsule', col: 1, capCols: 2 }
-        ];
-        _autoSetup.forEach(s => {
-            if (!dashConfig[s.id]) {
-                const k = findKey(s.kw);
-                if (k && tables[k]) {
-                    const t = tables[k];
-                    const entry = { isEmpty: false, title: (k.endsWith('表') ? k.slice(0, -1) : k), text: k, rule: s.rule };
-                    let valid = false;
-                    if (s.rule === 'kv') {
-                        if (t.rows && t.rows.length) { entry.card = t.rows[0][1]; }
-                        if (s.cols) entry.showCols = s.cols;
-                        valid = true;
-                    } else if (s.rule === 'capsule') {
-                        entry.capCol = s.col;
-                        if (s.capCols) entry.capCols = s.capCols;
-                        valid = true;
-                    }
-                    if (valid) { dashConfig[s.id] = entry; _cfgChanged = true; }
-                }
-            }
-        });
-        if (_cfgChanged) saveDashConfig(dashConfig);
-
         const renderFirstRowAllCols = (slotId) => {
             const cfg = getSlotCfg(slotId);
             const keyword = cfg.text;
@@ -2190,10 +2295,14 @@ ${allTableNames.map(tName => {
 
             const headers = table.headers || [];
             let targetRow = table.rows[0];
+            let targetRowIdx = 0;
 
             if (cfg.card) {
-                const found = table.rows.find(r => r[1] === cfg.card);
-                if (found) targetRow = found;
+                const foundIdx = table.rows.findIndex(r => r[1] === cfg.card);
+                if (foundIdx >= 0) {
+                    targetRow = table.rows[foundIdx];
+                    targetRowIdx = foundIdx;
+                }
             }
 
             let itemsHtml = '';
@@ -2205,10 +2314,11 @@ ${allTableNames.map(tName => {
 
                 const label = headers[idx] || `列${idx}`;
                 if (cell !== undefined && cell !== null && String(cell).trim() !== '') {
+                    const changed = dashChangesEnabled() && cellTouched(key, targetRowIdx, idx);
                     itemsHtml += `
-                        <div class="acu-dash-stat-row" style="display:flex; justify-content:flex-start; align-items:center; padding:8px 10px; background:var(--acu-btn-bg); border-radius:8px; border:1px solid transparent; width:100%; box-sizing:border-box;">
+                        <div class="acu-dash-stat-row${changed ? ' acu-dash-changed' : ''}" style="display:flex; justify-content:flex-start; align-items:center; padding:8px 10px; background:var(--acu-btn-bg); border-radius:8px; border:1px solid transparent; width:100%; box-sizing:border-box;">
                             <span class="acu-dash-stat-label" style="color:var(--acu-title-color); font-size:1em; margin-right:8px; white-space:normal; overflow-wrap:break-word; flex-shrink:0; width:90px;">${label}</span>
-                            <span class="acu-dash-stat-val" style="color:var(--acu-text-main); font-weight:bold; font-size:1em; white-space:pre-wrap; word-break:break-word; text-align:left;">${cell}</span>
+                            <span class="acu-dash-stat-val${changed ? ' acu-dash-changed' : ''}" style="color:var(--acu-text-main); font-weight:bold; font-size:1em; white-space:pre-wrap; word-break:break-word; text-align:left;">${cell}</span>
                         </div>
                     `;
                 }
@@ -2246,7 +2356,8 @@ ${allTableNames.map(tName => {
                 const val = row[targetColIdx] !== undefined ? row[targetColIdx] : '';
                 if (val && String(val).trim() !== '') {
                     const flexStyle = capCols === 2 ? 'display:flex; align-items:center; justify-content:center;' : '';
-                    itemsHtml += `<div class="acu-dash-npc-item acu-dash-interactive" data-tname="${key}" data-row="${rIdx}" data-col="${targetColIdx}" style="cursor:pointer; padding:10px 10px; background:var(--acu-table-head); border-radius:8px; border:1px solid transparent; font-size:0.9em; font-weight:500; transition:all 0.2s; ${flexStyle}">${iconHtml}${val}</div>`;
+                    const changed = dashChangesEnabled() && rowTouched(key, rIdx, row);
+                    itemsHtml += `<div class="acu-dash-npc-item acu-dash-interactive${changed ? ' acu-dash-changed' : ''}" data-tname="${key}" data-row="${rIdx}" data-col="${targetColIdx}" style="cursor:pointer; padding:10px 10px; background:var(--acu-table-head); border-radius:8px; border:1px solid transparent; font-size:0.9em; font-weight:500; transition:all 0.2s; ${flexStyle}">${iconHtml}${val}</div>`;
                 }
             });
 
@@ -2306,11 +2417,18 @@ ${allTableNames.map(tName => {
             let header = '<div class="acu-tab-header">';
             let body = '<div class="acu-tab-content-container" style="flex:1;">';
 
+            let activeIndex = 0;
+            if (dashChangesEnabled() && !isDashEditing) {
+                const changedAt = visibleIds.findIndex(sid => slotShowsChange(tables, getSlotCfg(sid)));
+                if (changedAt >= 0) activeIndex = changedAt;
+            }
+
             visibleIds.forEach((sid, i) => {
-                const active = i === 0 ? 'active' : '';
+                const active = i === activeIndex ? 'active' : '';
                 const title = getSlotTitle(sid);
                 const tabId = `${groupId}-${sid}`;
-                header += `<div class="acu-tab-btn ${active}" data-target="${tabId}">${title} ${getTabEditBtn(sid)}</div>`;
+                const tabChanged = slotShowsChange(tables, getSlotCfg(sid)) ? ' acu-dash-tab-changed' : '';
+                header += `<div class="acu-tab-btn ${active}${tabChanged}" data-target="${tabId}">${title} ${getTabEditBtn(sid)}</div>`;
                 body += `<div id="${tabId}" class="acu-tab-pane ${active}">${renderSlotContent(sid)}</div>`;
             });
             header += '</div>';
@@ -2362,7 +2480,7 @@ ${allTableNames.map(tName => {
 
         const html = `
             <div class="acu-panel-header">
-                <div class="acu-panel-title">
+                <div class="acu-panel-title${dashboardHasChanges(tables) ? ' acu-dash-header-changed' : ''}">
                     <i class="fa-solid fa-tachometer-alt"></i> 仪表盘
                     ${isDashEditing ? '<span style="font-size:12px; margin-left:10px; color:var(--acu-highlight); background:var(--acu-highlight-bg); padding:2px 8px; border-radius:4px;">编辑模式</span>' : ''}
                 </div>
@@ -3669,6 +3787,10 @@ ${allTableNames.map(tName => {
              if (getCore().getDB()?.exportTableAsJson && $) {
                   renderInterface(true);
                  const db = getCore().getDB();
+                 if (!loadSnapshot()) {
+                     const baseline = db.exportTableAsJson();
+                     if (baseline) saveSnapshot(baseline);
+                 }
                  if (db.registerTableUpdateCallback) {
                      db.registerTableUpdateCallback(UpdateController.handleUpdate);
                      if (db.registerTableFillStartCallback) {
