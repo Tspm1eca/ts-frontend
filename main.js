@@ -236,8 +236,24 @@
     const getHiddenTables = () => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY_HIDDEN_TABLES)) || []; } catch (e) { return []; } };
     const saveHiddenTables = (list) => { try { localStorage.setItem(STORAGE_KEY_HIDDEN_TABLES, JSON.stringify(list)); } catch (e) { console.error(e); } };
 
-    const loadSnapshot = () => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY_LAST_SNAPSHOT)); } catch (e) { return null; } };
-    const saveSnapshot = (data) => { try { localStorage.setItem(STORAGE_KEY_LAST_SNAPSHOT, JSON.stringify(data)); } catch (e) { console.error(e); } };
+    const snapshotHasSheets = (data) => {
+        if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+        return Object.keys(data).some(key => data[key] && data[key].name);
+    };
+    const loadSnapshot = () => {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY_LAST_SNAPSHOT);
+            if (!raw) return null;
+            const data = JSON.parse(raw);
+            if (snapshotHasSheets(data)) return data;
+            localStorage.removeItem(STORAGE_KEY_LAST_SNAPSHOT);
+            return null;
+        } catch (e) { return null; }
+    };
+    const saveSnapshot = (data) => {
+        if (!snapshotHasSheets(data)) return;
+        try { localStorage.setItem(STORAGE_KEY_LAST_SNAPSHOT, JSON.stringify(data)); } catch (e) { console.error(e); }
+    };
 
     const generateDiffMap = (currentData) => {
         const lastData = loadSnapshot();
