@@ -818,23 +818,10 @@
                 .acu-quick-view-body .acu-qv-row:hover .acu-dash-insert-btn,
                 .acu-dash-insert-btn:focus-visible { opacity: 1; pointer-events: auto; }
                 .acu-dash-insert-btn:hover { color: var(--acu-highlight); border-color: var(--acu-highlight); background: var(--acu-btn-hover); }
-                .acu-tab-content-container .acu-dash-stat-row:hover { padding-right: 36px !important; }
-                .acu-tab-content-container .acu-dash-npc-item:hover { padding-right: 34px !important; }
                 .acu-qv-row { position: relative; min-width: 0; }
-                .acu-quick-view-body .acu-qv-row > .acu-inline-item,
-                .acu-quick-view-body .acu-qv-row > .acu-full-item,
-                .acu-quick-view-body .acu-qv-row > .acu-grid-item { box-sizing: border-box; }
-                .acu-quick-view-body .acu-qv-row:hover > .acu-inline-item,
-                .acu-quick-view-body .acu-qv-row:hover > .acu-full-item,
-                .acu-quick-view-body .acu-qv-row:hover > .acu-grid-item { padding-right: 34px; }
                 @media (hover: none) {
                     .acu-tab-content-container .acu-dash-insert-btn,
                     .acu-quick-view-body .acu-dash-insert-btn { opacity: 1; pointer-events: auto; }
-                    .acu-tab-content-container .acu-dash-stat-row,
-                    .acu-tab-content-container .acu-dash-npc-item { padding-right: 36px !important; }
-                    .acu-quick-view-body .acu-inline-item,
-                    .acu-quick-view-body .acu-full-item,
-                    .acu-quick-view-body .acu-grid-item { padding-right: 34px; }
                 }
 
 
