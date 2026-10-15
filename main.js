@@ -1,6 +1,12 @@
 (function () {
     'use strict';
 
+    const host = window.parent || window;
+    try { host.ACUVisualizerUI?.destroy?.(); } catch (e) { console.warn('[ACU UI] 卸除舊實例失敗:', e); }
+    if (host !== window) {
+        try { window.ACUVisualizerUI?.destroy?.(); } catch (e) { console.warn('[ACU UI] 卸除舊實例失敗:', e); }
+    }
+
     const SCRIPT_ID = 'acu_visualizer_ui_v20_pagination';
     const STORAGE_KEY_TABLE_ORDER = 'acu_table_order';
     const STORAGE_KEY_ACTION_ORDER = 'acu_action_order';
@@ -23,6 +29,9 @@
     let isEditingOrder = false;
     let currentDiffMap = new Set();
     let observer = null;
+    let stopped = false;
+    let waitTimer = null;
+    let loadListener = null;
     let isCollapsed = localStorage.getItem(STORAGE_KEY_UI_COLLAPSE) === 'true';
     let globalScrollTop = 0;
     let currentPage = 1;
@@ -38,6 +47,7 @@
     const UpdateController = {
         _suppressNext: false,
         _resetTimer: null,
+        _silentTimer: null,
         runSilently: async (action) => {
             UpdateController._suppressNext = true;
             let result = false;
@@ -48,10 +58,15 @@
                 console.error(e);
                 result = false;
             }
-            setTimeout(() => { UpdateController._suppressNext = false; }, 2000);
+            clearTimeout(UpdateController._silentTimer);
+            UpdateController._silentTimer = setTimeout(() => {
+                if (stopped) return;
+                UpdateController._suppressNext = false;
+            }, 2000);
             return result;
         },
         handleUpdate: () => {
+            if (stopped) return;
             if (UpdateController._suppressNext) {
                 clearTimeout(UpdateController._resetTimer);
                 UpdateController._resetTimer = setTimeout(() => {
@@ -3591,24 +3606,75 @@ ${allTableNames.map(tName => {
         dialog.on('click', function(e) { if ($(e.target).hasClass('acu-edit-overlay')) close(); });
     };
 
+    const destroy = () => {
+        stopped = true;
+        clearTimeout(waitTimer);
+        waitTimer = null;
+        clearTimeout(UpdateController._resetTimer);
+        clearTimeout(UpdateController._silentTimer);
+        UpdateController._resetTimer = null;
+        UpdateController._silentTimer = null;
+        if (loadListener) {
+            window.removeEventListener('load', loadListener);
+            loadListener = null;
+        }
+        if (observer) {
+            observer.disconnect();
+            observer = null;
+        }
+        try {
+            const { $ } = getCore();
+            if ($) {
+                const stopSelectors = '.acu-data-display, .acu-nav-container, .acu-wrapper, .acu-edit-overlay, .acu-quick-view-overlay, .acu-cell-menu';
+                $('body').off('wheel touchstart touchmove touchend click', stopSelectors);
+                $('body').off('click.acu_autoclose');
+                $('#send_but').off('click.acu_opt_hide');
+                $('#send_textarea').off('keydown.acu_opt_hide');
+                $(`#${SCRIPT_ID}-styles`).remove();
+                $('.acu-wrapper, .acu-edit-overlay, .acu-cell-menu, .acu-quick-view-overlay, .acu-popup-overlay').remove();
+            }
+        } catch (e) {
+            console.warn('[ACU UI] destroy cleanup failed:', e);
+        }
+        isInitialized = false;
+    };
+
+    const api = host.ACUVisualizerUI || {};
+    api.destroy = destroy;
+    host.ACUVisualizerUI = api;
+    window.ACUVisualizerUI = api;
+
     const init = () => {
-        if (isInitialized) return;
+        if (stopped || isInitialized) return;
         addStyles();
         applyConfigStyles(getConfig());
         const loop = () => {
+             if (stopped) return;
              const { $ } = getCore();
              if (getCore().getDB()?.exportTableAsJson && $) {
                   renderInterface(true);
-                 const api = getCore().getDB();
-                 if (api.registerTableUpdateCallback) {
-                     api.registerTableUpdateCallback(UpdateController.handleUpdate);
-                     if (api.registerTableFillStartCallback) { api.registerTableFillStartCallback(() => { const c = api.exportTableAsJson(); if (c) saveSnapshot(c); }); }
+                 const db = getCore().getDB();
+                 if (db.registerTableUpdateCallback) {
+                     db.registerTableUpdateCallback(UpdateController.handleUpdate);
+                     if (db.registerTableFillStartCallback) {
+                         db.registerTableFillStartCallback(() => {
+                             if (stopped) return;
+                             const c = db.exportTableAsJson();
+                             if (c) saveSnapshot(c);
+                         });
+                     }
                  }
                  isInitialized = true;
-             } else setTimeout(loop, 1000);
+             } else {
+                 waitTimer = setTimeout(loop, 1000);
+             }
         };
         loop();
     };
     const { $ } = getCore();
-    if ($) $(document).ready(init); else window.addEventListener('load', init);
+    if ($) $(document).ready(init);
+    else {
+        loadListener = () => init();
+        window.addEventListener('load', loadListener);
+    }
 })();
