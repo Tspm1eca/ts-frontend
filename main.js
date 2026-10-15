@@ -819,10 +819,8 @@
                 .acu-tab-pane { display: none; animation: fadeIn 0.3s; }
                 .acu-tab-pane.active { display: block; }
                 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-                .acu-dash-stat-row.acu-dash-changed, .acu-dash-npc-item.acu-dash-changed { color: var(--acu-highlight) !important; background-color: var(--acu-highlight-bg) !important; border-color: var(--acu-highlight) !important; box-shadow: inset 0 0 0 1px var(--acu-highlight); animation: pulse-highlight 2s infinite; }
-                .acu-dash-stat-val.acu-dash-changed { color: var(--acu-highlight) !important; background-color: var(--acu-highlight-bg); border-radius: 4px; padding: 0 4px; }
-                .acu-tab-btn.acu-dash-tab-changed { color: var(--acu-highlight) !important; background: var(--acu-highlight-bg); border-radius: 4px 4px 0 0; }
-                .acu-dash-tab-changed::after, .acu-dash-header-changed::after, .acu-nav-btn.acu-dash-nav-changed::after { content: ''; display: inline-block; width: 7px; height: 7px; margin-left: 6px; border-radius: 50%; background: var(--acu-highlight); box-shadow: 0 0 6px var(--acu-highlight); animation: pulse-highlight 1.2s infinite; vertical-align: middle; flex: 0 0 auto; }
+                .acu-dash-stat-row.acu-dash-changed, .acu-dash-npc-item.acu-dash-changed { border-color: var(--acu-highlight) !important; }
+                .acu-dash-tab-changed::after, .acu-dash-header-changed::after, .acu-nav-btn.acu-dash-nav-changed::after { content: ''; display: inline-block; width: 7px; height: 7px; margin-left: 6px; border-radius: 50%; background: var(--acu-highlight); vertical-align: middle; flex: 0 0 auto; }
 
                 .acu-quick-view-overlay { position: fixed !important; top: 0; left: 0; right: 0; bottom: 0; width: 100vw; height: 100vh; background: var(--acu-overlay-bg) !important; z-index: 2147483648 !important; display: flex !important; justify-content: center !important; align-items: center !important; backdrop-filter: blur(4px); }
                 .acu-quick-view-card { background: var(--acu-card-bg); border-radius: 12px; border: 1px solid var(--acu-border); box-shadow: 0 15px 50px var(--acu-shadow); width: 90%; max-width: 450px; max-height: 80vh; display: flex; flex-direction: column; overflow: hidden; animation: popUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); color: var(--acu-text-main); }
@@ -2318,7 +2316,7 @@ ${allTableNames.map(tName => {
                     itemsHtml += `
                         <div class="acu-dash-stat-row${changed ? ' acu-dash-changed' : ''}" style="display:flex; justify-content:flex-start; align-items:center; padding:8px 10px; background:var(--acu-btn-bg); border-radius:8px; border:1px solid transparent; width:100%; box-sizing:border-box;">
                             <span class="acu-dash-stat-label" style="color:var(--acu-title-color); font-size:1em; margin-right:8px; white-space:normal; overflow-wrap:break-word; flex-shrink:0; width:90px;">${label}</span>
-                            <span class="acu-dash-stat-val${changed ? ' acu-dash-changed' : ''}" style="color:var(--acu-text-main); font-weight:bold; font-size:1em; white-space:pre-wrap; word-break:break-word; text-align:left;">${cell}</span>
+                            <span class="acu-dash-stat-val" style="color:var(--acu-text-main); font-weight:bold; font-size:1em; white-space:pre-wrap; word-break:break-word; text-align:left;">${cell}</span>
                         </div>
                     `;
                 }
