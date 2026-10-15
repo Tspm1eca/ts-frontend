@@ -102,6 +102,7 @@
         collapsePosition: 'center',
         frontendPosition: 'bottom',
         dashboardPosition: 'embedded',
+        dashboardDefaultExpanded: false,
         dbTheme: 'default',
         dbTransparentMap: {}
     };
@@ -1456,6 +1457,15 @@
                                     </select>
                                 </div>
                             </div>
+<div class="acu-control-row" id="row-dash-default-expand">
+                                <div class="acu-label-col"><span class="acu-label-main">默认展开仪表盘</span></div>
+                                <div class="acu-input-col">
+                                    <label class="acu-switch">
+                                        <input type="checkbox" id="cfg-dash-default-expand" ${config.dashboardDefaultExpanded ? 'checked' : ''}>
+                                        <span class="acu-slider-switch"></span>
+                                    </label>
+                                </div>
+                            </div>
                             <div class="acu-control-row">
                                 <div class="acu-label-col"><span class="acu-label-main">仪表盘字体大小</span></div>
                                 <div class="acu-input-col">
@@ -1574,6 +1584,11 @@ ${allTableNames.map(tName => {
             renderInterface(false);
         });
         dialog.find('#cfg-dash-pos').on('change', function() { saveConfig({ dashboardPosition: $(this).val() }); renderInterface(false); });
+        dialog.find('#cfg-dash-default-expand').on('change', function() {
+            saveConfig({ dashboardDefaultExpanded: $(this).is(':checked') });
+            $('.acu-embedded-dashboard-container').remove();
+            renderInterface(false);
+        });
         dialog.find('#cfg-show-option').on('change', function() {
             const checked = $(this).is(':checked');
             saveConfig({ showOptionPanel: checked });
@@ -1736,8 +1751,8 @@ ${allTableNames.map(tName => {
                     }
                 }
             } else {
-                // 首次创建或位置变更
-                let isCollapsed = true;
+                // 首次创建或位置变更：编辑模式强制展开，否则按「默认展开」配置
+                let isCollapsed = !getConfig().dashboardDefaultExpanded;
                 if (isDashEditing) isCollapsed = false;
 
                 const $container = $('<div class="acu-embedded-dashboard-container" style="margin-top: 6px; width: 100%; clear: both;"></div>');
