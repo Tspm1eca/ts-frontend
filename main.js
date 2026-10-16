@@ -1037,12 +1037,12 @@
                 .acu-card-main-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px; }
                 .acu-grid-item { display: flex; flex-direction: column; gap: 2px; padding: 4px 6px; border-radius: 6px; cursor: pointer; overflow: hidden; border: 1px solid var(--acu-border); background: rgba(0,0,0,0.02); }
                 .acu-grid-item:hover { background: var(--acu-table-hover); }
-                .acu-grid-label { font-size: var(--acu-font-size, 13px); color: var(--acu-title-color); font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                .acu-grid-label { font-size: var(--acu-font-size, 13px); color: var(--acu-text-sub); font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
                 .acu-grid-value { font-size: var(--acu-font-size, 13px); color: var(--acu-text-main); font-weight: 500; white-space: pre-wrap; word-break: break-word; line-height: 1.35; }
                 .acu-card-full-area { display: flex; flex-direction: column; gap: 0; padding: 0 12px 10px 12px; }
                 .acu-full-item { display: flex; flex-direction: column; gap: 2px; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--acu-border); background: rgba(0,0,0,0.02); cursor: pointer; margin-top: 4px; }
                 .acu-full-item:hover { background: var(--acu-table-hover); }
-                .acu-full-label { font-size: var(--acu-font-size, 13px); color: var(--acu-title-color); font-weight: bold; }
+                .acu-full-label { font-size: var(--acu-font-size, 13px); color: var(--acu-text-sub); font-weight: bold; }
                 .acu-full-value { font-size: var(--acu-font-size, 13px); color: var(--acu-text-main); line-height: 1.4; word-break: break-all; white-space: pre-wrap; max-height: var(--acu-text-max-height, 80px); overflow-y: var(--acu-text-overflow, auto); scrollbar-width: none; }
 
                 .acu-inline-item { display: block; padding: 2px 8px; border-bottom: 1px dashed var(--acu-border); cursor: pointer; max-height: var(--acu-text-max-height, 80px); overflow-y: var(--acu-text-overflow, auto); scrollbar-width: none; }
@@ -1050,7 +1050,7 @@
                 .acu-quick-view-body .acu-inline-item { border-bottom: 1px dashed var(--acu-border); }
                 .acu-quick-view-body .acu-card-full-area > .acu-qv-row:last-child .acu-inline-item { border-bottom: none; }
                 .acu-inline-item:hover { background: var(--acu-table-hover); }
-                .acu-inline-label { display: inline; color: var(--acu-title-color); font-weight: bold; font-size: var(--acu-font-size, 13px); line-height: 1.4; margin-right: 4px; }
+                .acu-inline-label { display: inline; color: var(--acu-text-sub); font-weight: bold; font-size: var(--acu-font-size, 13px); line-height: 1.4; margin-right: 4px; }
                 .acu-inline-label::after { content: '：'; }
                 .acu-inline-value { display: inline; color: var(--acu-text-main); font-size: var(--acu-font-size, 13px); line-height: 1.4; word-break: break-word; white-space: pre-wrap; }
                 .acu-grid-item.acu-highlight-changed,
@@ -2506,7 +2506,7 @@ ${allTableNames.map(tName => {
                     const insertText = toPlainInsertText(cell);
                     itemsHtml += `
                         <div class="acu-dash-stat-row${changed ? ' acu-dash-changed' : ''}" style="display:flex; justify-content:flex-start; align-items:center; padding:8px 10px; background:var(--acu-btn-bg); border-radius:8px; border:1px solid transparent; width:100%; box-sizing:border-box;">
-                            <span class="acu-dash-stat-label" style="color:var(--acu-title-color); font-size:1em; margin-right:8px; white-space:normal; overflow-wrap:break-word; flex-shrink:0; width:90px;">${label}</span>
+                            <span class="acu-dash-stat-label" style="font-size:1em; margin-right:8px; white-space:normal; overflow-wrap:break-word; flex-shrink:0; width:90px;">${label}</span>
                             <span class="acu-dash-stat-val" style="color:var(--acu-text-main); font-weight:bold; font-size:1em; white-space:pre-wrap; word-break:break-word; text-align:left;">${cell}</span>
                             ${dashInsertBtn(insertText)}
                         </div>
