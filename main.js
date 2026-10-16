@@ -1053,10 +1053,14 @@
                 .acu-inline-label { display: inline; color: var(--acu-title-color); font-weight: bold; font-size: var(--acu-font-size, 13px); line-height: 1.4; margin-right: 4px; }
                 .acu-inline-label::after { content: '：'; }
                 .acu-inline-value { display: inline; color: var(--acu-text-main); font-size: var(--acu-font-size, 13px); line-height: 1.4; word-break: break-word; white-space: pre-wrap; }
-                .acu-inline-value.acu-highlight-changed { display: inline; }
-
-                .acu-highlight-changed { color: var(--acu-highlight) !important; background-color: var(--acu-highlight-bg); border-radius: 4px; padding: 0 4px; font-weight: bold; animation: pulse-highlight 2s infinite; display: inline-block; }
-                @keyframes pulse-highlight { 0% { opacity: 0.7; } 50% { opacity: 1; } 100% { opacity: 0.7; } }
+                .acu-grid-item.acu-highlight-changed,
+                .acu-full-item.acu-highlight-changed,
+                .acu-inline-item.acu-highlight-changed,
+                .acu-editable-title.acu-highlight-changed {
+                    border: 1px solid var(--acu-highlight) !important;
+                    border-radius: 8px;
+                }
+                .acu-data-card.acu-highlight-changed { border-color: var(--acu-highlight) !important; }
                 @keyframes acu-shake { 0% { transform: rotate(0deg); } 25% { transform: rotate(10deg); } 50% { transform: rotate(0deg); } 75% { transform: rotate(-10deg); } 100% { transform: rotate(0deg); } }
 
                 .acu-menu-backdrop { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: transparent; z-index: 2147483640; }
@@ -2955,12 +2959,14 @@ ${allTableNames.map(tName => {
             const isSelected = selectedRows.has(rowKey);
             const isPendingDelete = pendingDeletes.has(`${tableName}-row-${realIndex}`);
 
-            html += `<div class="acu-data-card ${isSelected ? 'acu-card-selected' : ''}" data-row-key="${rowKey}">
+            const titleChanged = currentDiffMap.has(`${tableName}-${realIndex}-${titleColIndex}`);
+            const titleClass = titleChanged && config.highlightNew ? 'acu-highlight-changed' : '';
+            html += `<div class="acu-data-card ${isSelected ? 'acu-card-selected' : ''} ${rowClass}" data-row-key="${rowKey}">
                         ${isPendingDelete ? '<div class="acu-badge-pending">待删除</div>' : ''}
                         <div class="acu-card-header">
                             <input type=\"checkbox\" class=\"acu-card-checkbox\" data-row-key=\"${rowKey}\" ${isSelected ? 'checked' : ''} style=\"${isMultiSelectMode ? 'visibility:visible;' : 'visibility:hidden;'}\">
                             <span class="acu-card-index">${showDefaultIndex ? '#' + (realIndex + 1) : ''}</span>
-                            <span class="acu-cell acu-editable-title" data-key="${tableData.key}" data-tname="${tableName}" data-row="${realIndex}" data-col="${titleColIndex}" data-val="${encodeURIComponent(cardTitle)}" title="点击编辑标题">${cardTitle}</span>
+                            <span class="acu-cell acu-editable-title ${titleClass}" data-key="${tableData.key}" data-tname="${tableName}" data-row="${realIndex}" data-col="${titleColIndex}" data-val="${encodeURIComponent(cardTitle)}" title="点击编辑标题">${cardTitle}</span>
                         </div>
                         <div class="acu-card-body">`;
             let gridHtml = ''; let fullHtml = '';
@@ -2977,16 +2983,16 @@ ${allTableNames.map(tName => {
                     const contentHtml = badgeStyle ? `<span class="acu-badge ${badgeStyle}">${displayCell}</span>` : displayCell;
 
                     if (isListMode) {
-                         fullHtml += `<div class="acu-cell acu-inline-item" ${dataAttrs}><div class="acu-inline-label">${headerName}</div><div class="acu-inline-value ${cellHighlight}">${contentHtml}</div></div>`;
+                         fullHtml += `<div class="acu-cell acu-inline-item ${cellHighlight}" ${dataAttrs}><div class="acu-inline-label">${headerName}</div><div class="acu-inline-value">${contentHtml}</div></div>`;
                     } else {
                          if (codeIdx > 0) {
-                             fullHtml += `<div class="acu-cell acu-full-item" ${dataAttrs}><div class="acu-full-label">${headerName}</div><div class="acu-full-value ${cellHighlight}">${displayCell}</div></div>`;
+                             fullHtml += `<div class="acu-cell acu-full-item ${cellHighlight}" ${dataAttrs}><div class="acu-full-label">${headerName}</div><div class="acu-full-value">${displayCell}</div></div>`;
                          } else {
                             if (cellStr.length > 50) {
-                                fullHtml += `<div class="acu-cell acu-full-item" ${dataAttrs}><div class="acu-full-label">${headerName}</div><div class="acu-full-value ${cellHighlight}">${displayCell}</div></div>`;
+                                fullHtml += `<div class="acu-cell acu-full-item ${cellHighlight}" ${dataAttrs}><div class="acu-full-label">${headerName}</div><div class="acu-full-value">${displayCell}</div></div>`;
                             }
                             else {
-                                gridHtml += `<div class="acu-cell acu-grid-item" ${dataAttrs}><div class="acu-grid-label">${headerName}</div><div class="acu-grid-value ${cellHighlight}">${contentHtml}</div></div>`;
+                                gridHtml += `<div class="acu-cell acu-grid-item ${cellHighlight}" ${dataAttrs}><div class="acu-grid-label">${headerName}</div><div class="acu-grid-value">${contentHtml}</div></div>`;
                             }
                          }
                     }
@@ -3610,7 +3616,7 @@ ${allTableNames.map(tName => {
         } else {
             $displayTarget.text(newVal);
         }
-        $displayTarget.addClass('acu-highlight-changed');
+        $cell.addClass('acu-highlight-changed');
 
         const rawData = getTableData();
         if (rawData && rawData[tableKey]?.content[rowIdx + 1]) {
