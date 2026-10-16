@@ -18,6 +18,8 @@
     const STORAGE_KEY_REVERSE_TABLES = 'acu_reverse_tables';
     const STORAGE_KEY_HIDDEN_TABLES = 'acu_hidden_tables';
     const STORAGE_KEY_TABLE_STYLES = 'acu_table_styles';
+    const STORAGE_KEY_CELL_HISTORY = 'acu_cell_history_v1';
+    const MAX_CELL_HISTORY = 10;
 
     const TAB_DASHBOARD = 'acu_tab_dashboard_home';
     const STORAGE_KEY_DASH_CONFIG = 'acu_dash_config_v1';
@@ -29,6 +31,10 @@
     let isEditingOrder = false;
     let currentDiffMap = new Set();
     let lastAnnouncedDiff = '';
+    let lastPaintedDataSig = '';
+    let lastPaintedSnapSig = '';
+    let cellHistoryCache = null;
+    let cellHistoryDirty = false;
     let observer = null;
     let stopped = false;
     let waitTimer = null;
@@ -87,6 +93,16 @@
                 return;
             }
             if (isEditingOrder) return;
+            const { $ } = getCore();
+            const data = getCore().getDB()?.exportTableAsJson?.();
+            if (data && $ && $('.acu-wrapper').length) {
+                const dataSig = sigOf(data);
+                const snapSig = sigOf(loadSnapshot());
+                if (dataSig && dataSig === lastPaintedDataSig && snapSig === lastPaintedSnapSig) {
+                    cachedTableData = data;
+                    return;
+                }
+            }
             cachedTableData = null;
             renderInterface(true);
         }
@@ -266,6 +282,86 @@
         try { localStorage.setItem(STORAGE_KEY_LAST_SNAPSHOT, JSON.stringify(data)); } catch (e) { console.error(e); }
     };
 
+    const sigOf = (data) => {
+        let raw = '';
+        try { raw = JSON.stringify(data); } catch (e) { return ''; }
+        if (!raw) return '';
+        let hash = 5381;
+        for (let i = 0; i < raw.length; i++) hash = ((hash << 5) + hash) ^ raw.charCodeAt(i);
+        return raw.length + ':' + (hash >>> 0).toString(16);
+    };
+
+    const escapeHtml = (text) => String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+    const getChatIsolationKey = () => {
+        try {
+            const w = window.parent || window;
+            let ctx = null;
+            try {
+                ctx = w.SillyTavern?.getContext?.() || (typeof w.getContext === 'function' ? w.getContext() : null);
+            } catch (e) { ctx = null; }
+            let id = '';
+            if (ctx) id = ctx.chatId || ctx.getCurrentChatId?.() || '';
+            if (!id && w.SillyTavern) {
+                const st = w.SillyTavern;
+                id = (typeof st.getCurrentChatId === 'function' ? st.getCurrentChatId() : st.chatId) || '';
+            }
+            return id ? `chat_${id}` : '';
+        } catch (e) { return ''; }
+    };
+
+    const loadCellHistory = () => {
+        if (cellHistoryCache) return cellHistoryCache;
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY_CELL_HISTORY);
+            cellHistoryCache = raw ? JSON.parse(raw) : {};
+        } catch (e) {
+            cellHistoryCache = {};
+        }
+        if (!cellHistoryCache || typeof cellHistoryCache !== 'object' || Array.isArray(cellHistoryCache)) cellHistoryCache = {};
+        return cellHistoryCache;
+    };
+
+    const commitCellHistory = () => {
+        if (!cellHistoryDirty || !cellHistoryCache) return;
+        cellHistoryDirty = false;
+        try { localStorage.setItem(STORAGE_KEY_CELL_HISTORY, JSON.stringify(cellHistoryCache)); }
+        catch (e) { console.error('[ACU UI] 保存格子历史失败:', e); }
+    };
+
+    const rememberCellValue = (tableName, rowIdx, colIdx, oldValue, promote) => {
+        if (!tableName && tableName !== 0) return;
+        const text = oldValue === undefined || oldValue === null ? '' : String(oldValue);
+        const key = `${tableName}-${rowIdx}-${colIdx}`;
+        const iso = getChatIsolationKey();
+        const all = loadCellHistory();
+        const list = Array.isArray(all[key]) ? all[key].slice() : [];
+        const sameIdx = list.findIndex(item => (item.isolationKey || '') === iso && item.value === text);
+        if (!promote && sameIdx !== -1) return;
+        if (promote && sameIdx === 0) return;
+        if (sameIdx >= 0) list.splice(sameIdx, 1);
+        list.unshift({ value: text, timestamp: Date.now(), isolationKey: iso });
+        const counts = {};
+        all[key] = list.filter(item => {
+            const bucket = item.isolationKey || '';
+            counts[bucket] = (counts[bucket] || 0) + 1;
+            return counts[bucket] <= MAX_CELL_HISTORY;
+        });
+        cellHistoryDirty = true;
+    };
+
+    const getCellHistoryForCell = (tableName, rowIdx, colIdx) => {
+        const key = `${tableName}-${rowIdx}-${colIdx}`;
+        const list = loadCellHistory()[key];
+        if (!Array.isArray(list)) return [];
+        const iso = getChatIsolationKey();
+        return list.filter(item => (item.isolationKey || '') === iso);
+    };
+
     // 使用者送出／生成開始時凍結「回覆前」的表格，這一輪只高亮相對這份快照的差異。
     const freezeTurnBaseline = () => {
         if (stopped || turnBaselineFrozen) return;
@@ -300,11 +396,15 @@
                     row.forEach((cell, cIdx) => {
                         if (cIdx === 0) return;
                         const oldCell = oldRow[cIdx];
-                        if (String(cell) !== String(oldCell)) { diffSet.add(`${tableName}-${rIdx-1}-${cIdx}`); }
+                        if (String(cell) !== String(oldCell)) {
+                            diffSet.add(`${tableName}-${rIdx-1}-${cIdx}`);
+                            rememberCellValue(tableName, rIdx - 1, cIdx, oldCell, false);
+                        }
                     });
                 }
             });
         }
+        commitCellHistory();
         return diffSet;
     };
 
@@ -964,6 +1064,14 @@
                 .acu-cell-menu-item { padding: 12px 16px; cursor: pointer; font-size: 14px; display: flex; gap: 12px; align-items: center; color: var(--acu-text-main); font-weight: 500; background: transparent; }
                 .acu-cell-menu-item:hover { background-color: var(--acu-table-hover); }
                 .acu-cell-menu-item#act-delete { color: #e74c3c; }
+                .acu-cell-menu-item#act-history { color: #2980b9; }
+                .acu-history-dialog { width: 90%; max-width: 520px; height: auto; }
+                .acu-history-hint { margin: 0 0 12px; font-size: 12px; color: var(--acu-text-sub); line-height: 1.5; }
+                .acu-history-list { display: flex; flex-direction: column; gap: 8px; }
+                .acu-history-item { display: flex; flex-direction: column; align-items: stretch; gap: 4px; width: 100%; text-align: left; padding: 10px 12px; border: 1px solid var(--acu-border); border-radius: 8px; background: var(--acu-input-bg); color: var(--acu-text-main); cursor: pointer; font: inherit; }
+                .acu-history-item:hover { background: var(--acu-table-hover); }
+                .acu-history-time { font-size: 12px; color: var(--acu-text-sub); }
+                .acu-history-value { white-space: pre-wrap; word-break: break-word; max-height: 96px; overflow: auto; }
 
                 .acu-edit-overlay { position: fixed !important; top: 0; left: 0; right: 0; bottom: 0; width: 100vw; height: 100vh; background: var(--acu-overlay-bg) !important; z-index: 2147483646 !important; display: flex !important; justify-content: center !important; align-items: center !important; backdrop-filter: blur(2px); }
                 .acu-edit-dialog { background-color: var(--acu-bg-panel) !important; width: 90%; max-width: 900px; max-height: 85vh; border-radius: 12px; display: flex; flex-direction: column; box-shadow: 0 15px 50px var(--acu-shadow); color: var(--acu-text-main) !important; border: 1px solid var(--acu-border); margin: auto !important; overflow: hidden; padding: 0; }
@@ -2296,6 +2404,8 @@ ${allTableNames.map(tName => {
                 $('.acu-panel-content').scrollTop(globalScrollTop);
             }
             if (isEditingOrder) initSortable();
+            lastPaintedDataSig = sigOf(rawData);
+            lastPaintedSnapSig = sigOf(loadSnapshot());
         } catch(e) { console.error("UI Render Error:", e); }
         finally { renderLock--; }
     };
@@ -3482,6 +3592,74 @@ ${allTableNames.map(tName => {
         setup('.acu-nav-actions-area .acu-action-btn');
     };
 
+    const commitCellValue = async (cell, tableKey, tableName, rowIdx, colIdx, newVal) => {
+        const { $ } = getCore();
+        const $cell = $(cell);
+        $cell.attr('data-val', encodeURIComponent(newVal));
+        $cell.data('val', encodeURIComponent(newVal));
+
+        let $displayTarget = $cell;
+        if ($cell.hasClass('acu-grid-item')) $displayTarget = $cell.find('.acu-grid-value');
+        else if ($cell.hasClass('acu-full-item')) $displayTarget = $cell.find('.acu-full-value');
+        else if ($cell.hasClass('acu-inline-item')) $displayTarget = $cell.find('.acu-inline-value');
+        else if ($cell.hasClass('acu-editable-title')) $displayTarget = $cell;
+
+        const badgeStyle = getBadgeStyle(newVal);
+        if (badgeStyle && !$cell.hasClass('acu-editable-title')) {
+            $displayTarget.html(`<span class="acu-badge ${badgeStyle}">${newVal}</span>`);
+        } else {
+            $displayTarget.text(newVal);
+        }
+        $displayTarget.addClass('acu-highlight-changed');
+
+        const rawData = getTableData();
+        if (rawData && rawData[tableKey]?.content[rowIdx + 1]) {
+            rawData[tableKey].content[rowIdx + 1][colIdx] = newVal;
+            return saveDataToDatabase(rawData, true, false, {
+                type: 'cell_edit',
+                tableName: tableName,
+                rowIndex: rowIdx,
+                colIndex: colIdx,
+                newValue: newVal
+            });
+        }
+        return false;
+    };
+
+    const showCellHistoryDialog = (entries, onPick) => {
+        const { $ } = getCore();
+        const config = getConfig();
+        const items = entries.map((item, index) => {
+            const when = new Date(item.timestamp).toLocaleString();
+            const preview = item.value === '' ? '（空）' : escapeHtml(item.value);
+            return `<button type="button" class="acu-history-item" data-index="${index}"><span class="acu-history-time">${escapeHtml(when)}</span><span class="acu-history-value">${preview}</span></button>`;
+        }).join('');
+        const dialog = $(`
+            <div class="acu-edit-overlay">
+                <div class="acu-edit-dialog acu-history-dialog acu-theme-${config.theme}">
+                    <div class="acu-edit-title">以前的内容</div>
+                    <div class="acu-settings-content">
+                        <p class="acu-history-hint">点一条就写回这一格。每一格最多留 ${MAX_CELL_HISTORY} 条，只保存在这台浏览器。</p>
+                        <div class="acu-history-list">${items}</div>
+                    </div>
+                    <div class="acu-dialog-btns">
+                        <button class="acu-dialog-btn" id="dlg-history-close"><i class="fa-solid fa-times"></i> 关闭</button>
+                    </div>
+                </div>
+            </div>
+        `);
+        $('body').append(dialog);
+        const closeDialog = () => dialog.remove();
+        dialog.find('#dlg-history-close').click(closeDialog);
+        dialog.on('click', function (e) { if ($(e.target).hasClass('acu-edit-overlay')) closeDialog(); });
+        dialog.find('.acu-history-item').on('click', function () {
+            const picked = entries[parseInt($(this).attr('data-index'), 10)];
+            dialog.find('.acu-history-item').prop('disabled', true);
+            closeDialog();
+            if (picked) onPick(picked.value);
+        });
+    };
+
     const showCellMenu = (e, cell) => {
         const { $ } = getCore();
         $('.acu-cell-menu, .acu-menu-backdrop').remove();
@@ -3494,10 +3672,12 @@ ${allTableNames.map(tName => {
         const content = decodeURIComponent($(cell).data('val'));
         const config = getConfig();
         const deleteKey = `${tableName}-row-${rowIdx}`;
+        const cellHistory = getCellHistoryForCell(tableName, rowIdx, colIdx);
 
         const menu = $(`
             <div class="acu-cell-menu acu-theme-${config.theme}">
                 <div class="acu-cell-menu-item" id="act-edit"><i class="fa-solid fa-pen"></i> 编辑内容</div>
+                ${cellHistory.length ? `<div class="acu-cell-menu-item" id="act-history"><i class="fa-solid fa-undo"></i> 以前的内容 (${cellHistory.length})</div>` : ''}
                 <div class="acu-cell-menu-item" id="act-edit-card"><i class="fa-solid fa-edit"></i> 整体编辑</div>
                 <div class="acu-cell-menu-item" id="act-insert" style="color:#2980b9"><i class="fa-solid fa-plus"></i> 插入新行</div>
                 ${pendingDeletes.has(`${tableName}-row-${rowIdx}`) ? `<div class="acu-cell-menu-item" id="act-restore" style="color:#27ae60;"><i class="fa-solid fa-undo"></i> 恢复整行</div>` : `<div class="acu-cell-menu-item" id="act-delete"><i class="fa-solid fa-trash"></i> 删除整行</div>`}
@@ -3551,34 +3731,22 @@ ${allTableNames.map(tName => {
         menu.find('#act-edit').click(() => {
             closeAll();
             showEditDialog(content, async (newVal) => {
-                const $cell = $(cell);
-                $cell.attr('data-val', encodeURIComponent(newVal));
-                $cell.data('val', encodeURIComponent(newVal));
-
-                let $displayTarget = $cell;
-                if ($cell.hasClass('acu-grid-item')) $displayTarget = $cell.find('.acu-grid-value');
-                else if ($cell.hasClass('acu-full-item')) $displayTarget = $cell.find('.acu-full-value');
-                else if ($cell.hasClass('acu-inline-item')) $displayTarget = $cell.find('.acu-inline-value');
-                else if ($cell.hasClass('acu-editable-title')) $displayTarget = $cell;
-
-                const badgeStyle = getBadgeStyle(newVal);
-                if (badgeStyle && !$cell.hasClass('acu-editable-title')) {
-                     $displayTarget.html(`<span class="acu-badge ${badgeStyle}">${newVal}</span>`);
-                } else {
-                     $displayTarget.text(newVal);
+                if (String(content) === String(newVal)) return;
+                const saved = await commitCellValue(cell, tableKey, tableName, rowIdx, colIdx, newVal);
+                if (saved) {
+                    rememberCellValue(tableName, rowIdx, colIdx, content, true);
+                    commitCellHistory();
                 }
-                $displayTarget.addClass('acu-highlight-changed');
-
-                const rawData = getTableData();
-                if (rawData && rawData[tableKey]?.content[rowIdx + 1]) {
-                      rawData[tableKey].content[rowIdx + 1][colIdx] = newVal;
-                    await saveDataToDatabase(rawData, true, false, {
-                        type: 'cell_edit',
-                        tableName: tableName,
-                        rowIndex: rowIdx,
-                        colIndex: colIdx,
-                        newValue: newVal
-                    });
+            });
+        });
+        menu.find('#act-history').click(() => {
+            closeAll();
+            showCellHistoryDialog(cellHistory, async (oldVal) => {
+                if (String(content) === String(oldVal)) return;
+                const saved = await commitCellValue(cell, tableKey, tableName, rowIdx, colIdx, oldVal);
+                if (saved) {
+                    rememberCellValue(tableName, rowIdx, colIdx, content, true);
+                    commitCellHistory();
                 }
             });
         });
@@ -3662,22 +3830,28 @@ ${allTableNames.map(tName => {
                 const currentRow = currentData[tableKey].content[rowIndex + 1];
                 let hasChanges = false;
                 let updateObj = {};
+                const previousValues = [];
                 dialog.find('textarea').each(function () {
                     const colIdx = parseInt($(this).data('col'));
                     const newVal = $(this).val();
                     if (String(currentRow[colIdx]) !== String(newVal)) {
                         hasChanges = true;
+                        previousValues.push({ colIdx, value: currentRow[colIdx] });
                         currentRow[colIdx] = newVal;
                         if (headers[colIdx]) updateObj[headers[colIdx]] = newVal;
                     }
                 });
                 if (hasChanges) {
-                    await saveDataToDatabase(currentData, false, false, {
+                    const saved = await saveDataToDatabase(currentData, false, false, {
                         type: 'row_edit',
                         tableName: tableName,
                         rowIndex: rowIndex,
                         updateObj: updateObj
                     });
+                    if (saved) {
+                        previousValues.forEach(item => rememberCellValue(tableName, rowIndex, item.colIdx, item.value, true));
+                        commitCellHistory();
+                    }
                 }
             }
             closeDialog();
