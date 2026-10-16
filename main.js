@@ -931,7 +931,7 @@
                 .acu-dash-container { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; height: 100%; padding: 0; overflow: hidden; box-sizing: border-box; font-size: var(--acu-dash-font-size, var(--acu-font-size)); } .acu-dash-col { display: flex; flex-direction: column; gap: 0; height: 100%; overflow: hidden; }
                 @media (max-width: 768px) { .acu-dash-container { grid-template-columns: 1fr; overflow-y: auto; display: flex; flex-direction: column; height: auto; } .acu-dash-col { height: auto; flex: none; overflow: visible; } }
                 .acu-dash-card { background: var(--acu-card-bg); border-radius: 0; border: none; padding: 16px; display: flex; flex-direction: column; gap: 12px; box-shadow: none; }
-                .acu-dash-title { font-size: var(--acu-dash-font-size, var(--acu-font-size)); font-weight: bold; color: var(--acu-highlight); border-bottom: 1px dashed var(--acu-border); padding-bottom: 8px; margin-bottom: 4px; display: flex; justify-content: center; align-items: center; }
+                .acu-dash-title { font-size: var(--acu-dash-font-size, var(--acu-font-size)); font-weight: bold; color: var(--acu-text-main); border-bottom: 1px dashed var(--acu-border); padding-bottom: 8px; margin-bottom: 4px; display: flex; justify-content: center; align-items: center; }
                 .acu-dash-char-info { display: flex; flex-direction: column; gap: 10px; } @media (min-width: 769px) { .acu-dash-top-kv { display: grid !important; grid-template-columns: 1fr 1fr; } }
                 .acu-dash-stat-row { display: flex; justify-content: space-between; align-items: center; padding: 8px; background: var(--acu-btn-bg); border-radius: 8px; }
                 .acu-dash-stat-label { color: var(--acu-text-sub); font-size: 0.9em; }
@@ -976,7 +976,7 @@
 
                 .acu-quick-view-overlay { position: fixed !important; top: 0; left: 0; right: 0; bottom: 0; width: 100vw; height: 100vh; background: var(--acu-overlay-bg) !important; z-index: 2147483648 !important; display: flex !important; justify-content: center !important; align-items: center !important; backdrop-filter: blur(4px); }
                 .acu-quick-view-card { background: var(--acu-card-bg); border-radius: 12px; border: 1px solid var(--acu-border); box-shadow: 0 15px 50px var(--acu-shadow); width: 90%; max-width: 450px; max-height: 80vh; display: flex; flex-direction: column; overflow: hidden; animation: popUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); color: var(--acu-text-main); }
-                .acu-quick-view-header { padding: 5px; background: var(--acu-table-head); border-bottom: 1px solid var(--acu-border); font-weight: bold; display: flex; justify-content: space-between; align-items: center; font-size: 1.1em; color: var(--acu-highlight); }
+                .acu-quick-view-header { padding: 5px; background: var(--acu-table-head); border-bottom: 1px solid var(--acu-border); font-weight: bold; display: flex; justify-content: space-between; align-items: center; font-size: 1.1em; color: var(--acu-text-main); }
                 .acu-quick-view-body { padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; scrollbar-width: thin; }
 
 
@@ -1029,9 +1029,9 @@
                 }
 
                 .acu-layout-vertical .acu-data-card:hover { transform: translateY(-4px); box-shadow: 0 8px 25px var(--acu-shadow); z-index: 5; }
-                .acu-card-header { padding: 6px 24px; background: var(--acu-table-head); border-bottom: 1px dashed var(--acu-border); border-radius: 12px 12px 0 0; font-weight: bold; color: var(--acu-title-color); font-size: 14px; display: flex; justify-content: center; align-items: center; position: relative; flex: 0 0 auto; }
-                .acu-editable-title { cursor: pointer; border-bottom: 1px dashed transparent; transition: all 0.2s; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(var(--acu-font-size) + 1px); font-weight: 800; text-align: center; width: 100%; padding: 2px 5px; border-radius: 4px; }
-                .acu-editable-title:hover { background: var(--acu-table-hover); color: var(--acu-highlight); }
+                .acu-card-header { padding: 6px 24px; background: var(--acu-table-head); border-bottom: 1px dashed var(--acu-border); border-radius: 12px 12px 0 0; font-weight: bold; color: var(--acu-text-main); font-size: 14px; display: flex; justify-content: center; align-items: center; position: relative; flex: 0 0 auto; }
+                .acu-editable-title { cursor: pointer; border-bottom: 1px dashed transparent; transition: all 0.2s; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(var(--acu-font-size) + 1px); font-weight: 800; text-align: center; width: 100%; padding: 2px 5px; border-radius: 4px; color: var(--acu-text-main); }
+                .acu-editable-title:hover { background: var(--acu-table-hover); color: var(--acu-text-main); }
                 .acu-card-index { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 10px; color: var(--acu-text-sub); font-weight: normal; background: var(--acu-badge-bg); padding: 1px 6px; border-radius: 8px; opacity: 0.8; }
                 .acu-card-body { padding: 0; display: flex; flex-direction: column; gap: 0; font-size: var(--acu-font-size, 13px); }
                 .acu-card-main-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px; }
