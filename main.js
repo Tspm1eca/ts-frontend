@@ -970,6 +970,10 @@
                 .acu-tab-pane.active { display: block; }
                 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
                 .acu-dash-stat-row.acu-dash-changed, .acu-dash-npc-item.acu-dash-changed { border-color: var(--acu-highlight) !important; }
+                .acu-dash-stat-row.acu-cell { cursor: pointer; }
+                .acu-tab-content-container .acu-dash-stat-row.acu-cell:hover { border-color: var(--acu-highlight) !important; }
+                .acu-dash-cell-value { display: contents; }
+                .acu-dash-pending-delete { opacity: 0.5; box-shadow: inset 0 0 0 1px #e74c3c; }
                 .acu-quick-view-card .acu-inline-item.acu-dash-changed, .acu-quick-view-card .acu-full-item.acu-dash-changed, .acu-quick-view-card .acu-grid-item.acu-dash-changed { border: 1px solid var(--acu-highlight, #d35400) !important; border-radius: 8px; }
                 .acu-quick-view-card .acu-inline-item.acu-dash-changed { margin: 4px 0; }
                 .acu-dash-tab-changed::after, .acu-dash-header-changed::after, .acu-nav-btn.acu-dash-nav-changed::after { content: ''; display: inline-block; width: 7px; height: 7px; margin-left: 6px; border-radius: 50%; background: var(--acu-highlight); vertical-align: middle; flex: 0 0 auto; }
@@ -2127,6 +2131,7 @@ ${allTableNames.map(tName => {
                 const $opts = $target.find('.acu-embedded-options-container');
                 if ($opts.length) { $opts.before($container); } else { $target.append($container); }
             }
+            bindAcuCellClicks($('.acu-embedded-dashboard-container'));
         }
     };
 
@@ -2422,6 +2427,9 @@ ${allTableNames.map(tName => {
         return (holder.content.textContent || '').replace(/\u00a0/g, ' ').trim();
     };
 
+    const dashCellAttrs = (sheetKey, tableName, rowIdx, colIdx, value) =>
+        `data-key="${escapeHtml(sheetKey)}" data-tname="${escapeHtml(tableName)}" data-row="${rowIdx}" data-col="${colIdx}" data-val="${encodeURIComponent(value == null ? '' : String(value))}"`;
+
     const dashInsertBtn = (text) => {
         const clean = String(text || '').trim();
         if (!clean) return '';
@@ -2505,7 +2513,7 @@ ${allTableNames.map(tName => {
                     const changed = dashChangesEnabled() && cellTouched(key, targetRowIdx, idx);
                     const insertText = toPlainInsertText(cell);
                     itemsHtml += `
-                        <div class="acu-dash-stat-row${changed ? ' acu-dash-changed' : ''}" style="display:flex; justify-content:flex-start; align-items:center; padding:8px 10px; background:var(--acu-btn-bg); border-radius:8px; border:1px solid transparent; width:100%; box-sizing:border-box;">
+                        <div class="acu-cell acu-dash-stat-row${changed ? ' acu-dash-changed' : ''}" ${dashCellAttrs(table.key, key, targetRowIdx, idx, cell)} title="点击编辑" style="display:flex; justify-content:flex-start; align-items:center; padding:8px 10px; background:var(--acu-btn-bg); border-radius:8px; border:1px solid transparent; width:100%; box-sizing:border-box;">
                             <span class="acu-dash-stat-label" style="font-size:1em; margin-right:8px; white-space:normal; overflow-wrap:break-word; flex-shrink:0; width:90px;">${label}</span>
                             <span class="acu-dash-stat-val" style="color:var(--acu-text-main); font-weight:bold; font-size:1em; white-space:pre-wrap; word-break:break-word; text-align:left;">${cell}</span>
                             ${dashInsertBtn(insertText)}
@@ -2547,7 +2555,7 @@ ${allTableNames.map(tName => {
                 if (val && String(val).trim() !== '') {
                     const flexStyle = capCols === 2 ? 'display:flex; align-items:center; justify-content:center;' : '';
                     const changed = dashChangesEnabled() && rowTouched(key, rIdx, row);
-                    itemsHtml += `<div class="acu-dash-npc-item acu-dash-interactive${changed ? ' acu-dash-changed' : ''}" data-tname="${key}" data-row="${rIdx}" data-col="${targetColIdx}" style="cursor:pointer; padding:10px 10px; background:var(--acu-table-head); border-radius:8px; border:1px solid transparent; font-size:0.9em; font-weight:500; transition:all 0.2s; ${flexStyle}">${iconHtml}${val}${dashInsertBtn(toPlainInsertText(val))}</div>`;
+                    itemsHtml += `<div class="acu-cell acu-dash-npc-item acu-dash-interactive${changed ? ' acu-dash-changed' : ''}" ${dashCellAttrs(table.key, key, rIdx, targetColIdx, val)} title="点击编辑" style="cursor:pointer; padding:10px 10px; background:var(--acu-table-head); border-radius:8px; border:1px solid transparent; font-size:0.9em; font-weight:500; transition:all 0.2s; ${flexStyle}">${iconHtml}<span class="acu-dash-cell-value">${val}</span>${dashInsertBtn(toPlainInsertText(val))}</div>`;
                 }
             });
 
@@ -3026,6 +3034,7 @@ ${allTableNames.map(tName => {
         isMultiSelectMode = false;
         selectedRows.clear();
         pendingDeletes.clear();
+        $('.acu-dash-pending-delete').removeClass('acu-dash-pending-delete');
         if (typeof updateDynamicActionButton === 'function') updateDynamicActionButton();
         $('.acu-nav-btn').removeClass('active');
         saveActiveTabState(null);
@@ -3097,16 +3106,18 @@ ${allTableNames.map(tName => {
         });
 
         const bindDynamicContentEvents = () => {
-            $('.acu-cell').off('click').on('click', function(e) { if(isMultiSelectMode) return; e.stopPropagation(); showCellMenu(e, this); });
+            bindAcuCellClicks();
              $('.acu-dash-interactive').off('click').on('click', function(e) {
                 if ($(e.target).closest('.acu-dash-insert-btn').length) return;
+                if ($(this).hasClass('acu-cell')) return;
                 e.stopPropagation();
-                const tableName = $(this).data('tname');
-                const rowIdx = $(this).data('row'); const colIdx = $(this).data('col');
+                const tableName = $(this).attr('data-tname');
+                const rowIdx = parseInt($(this).attr('data-row'), 10);
+                const colIdx = parseInt($(this).attr('data-col'), 10);
                 if (tableName && tables[tableName]) {
                      const table = tables[tableName];
                      const row = table.rows[rowIdx];
-                     if (row) showQuickView(row, table.headers, tableName, colIdx, rowIdx);
+                     if (row) showQuickView(row, table.headers, tableName, colIdx, rowIdx, table.key);
                 }
             });
             $('.acu-dash-insert-btn').off('mousedown.acu_insert click.acu_insert');
@@ -3174,6 +3185,7 @@ ${allTableNames.map(tName => {
                 Array.from(selectedRows.values()).forEach(item => {
                     if (item.tableName === tableName) {
                         pendingDeletes.delete(`${tableName}-row-${item.rowIndex}`);
+                        paintRowPending(item.tableName, item.rowIndex, false);
                     }
                 });
 
@@ -3206,14 +3218,12 @@ ${allTableNames.map(tName => {
                     selectedRows.set(rowKey, { tableName, rowIndex, key });
                     $card.addClass('acu-card-selected');
                     pendingDeletes.add(delKey);
-                    if ($card.find('.acu-badge-pending').length === 0) {
-                        $card.prepend('<div class="acu-badge-pending">待删除</div>');
-                    }
+                    paintRowPending(tableName, rowIndex, true);
                 } else {
                     selectedRows.delete(rowKey);
                     $card.removeClass('acu-card-selected');
                     pendingDeletes.delete(delKey);
-                    $card.find('.acu-badge-pending').remove();
+                    paintRowPending(tableName, rowIndex, false);
                 }
 
                 // 只更新头部的选中计数和按钮状态，不重新渲染整个表格
@@ -3466,10 +3476,16 @@ ${allTableNames.map(tName => {
         bindDataAreaEvents();
     };
 
-    const showQuickView = (row, headers, tableName, titleColIdx, rowIdx) => {
+    const showQuickView = (row, headers, tableName, titleColIdx, rowIdx, tableKey) => {
         const { $ } = getCore();
         const config = getConfig();
         $('.acu-quick-view-overlay').remove();
+        if (!tableKey && tableName) {
+            const raw = getTableData();
+            const processed = raw ? processJsonData(raw) : null;
+            if (processed && processed[tableName]) tableKey = processed[tableName].key;
+        }
+        const canEdit = !!tableKey && rowIdx !== undefined && rowIdx !== null;
         const codeIdx = headers.findIndex(h => h && (String(h).includes('编码') || String(h).includes('索引')));
         const savedStyles = getTableStyles();
         const currentStyle = savedStyles[tableName] || 'list';
@@ -3491,14 +3507,17 @@ ${allTableNames.map(tName => {
                 const changed = dashChangesEnabled() && rowIdx !== undefined && rowIdx !== null && cellTouched(tableName, rowIdx, cIdx);
                 const changedClass = changed ? ' acu-dash-changed' : '';
                 const insertBtn = dashInsertBtn(toPlainInsertText(displayCell));
+                const editAttrs = canEdit
+                    ? ` ${dashCellAttrs(tableKey, tableName, rowIdx, cIdx, cell)} title="点击编辑"`
+                    : '';
 
                 if (currentStyle === 'list' || codeIdx > 0) {
-                     fullHtml += `<div class="acu-qv-row"><div class="acu-cell acu-inline-item${changedClass}" style="cursor:default"><div class="acu-inline-label">${headerName}</div><div class="acu-inline-value">${contentHtml}</div></div>${insertBtn}</div>`;
+                     fullHtml += `<div class="acu-qv-row"><div class="acu-cell acu-inline-item${changedClass}"${editAttrs}><div class="acu-inline-label">${headerName}</div><div class="acu-inline-value">${contentHtml}</div></div>${insertBtn}</div>`;
                 } else {
                      if (cellStr.length > 50) {
-                        fullHtml += `<div class="acu-qv-row"><div class="acu-cell acu-full-item${changedClass}" style="cursor:default"><div class="acu-full-label">${headerName}</div><div class="acu-full-value">${displayCell}</div></div>${insertBtn}</div>`;
+                        fullHtml += `<div class="acu-qv-row"><div class="acu-cell acu-full-item${changedClass}"${editAttrs}><div class="acu-full-label">${headerName}</div><div class="acu-full-value">${displayCell}</div></div>${insertBtn}</div>`;
                      } else {
-                        gridHtml += `<div class="acu-qv-row"><div class="acu-cell acu-grid-item${changedClass}" style="cursor:default"><div class="acu-grid-label">${headerName}</div><div class="acu-grid-value">${contentHtml}</div></div>${insertBtn}</div>`;
+                        gridHtml += `<div class="acu-qv-row"><div class="acu-cell acu-grid-item${changedClass}"${editAttrs}><div class="acu-grid-label">${headerName}</div><div class="acu-grid-value">${contentHtml}</div></div>${insertBtn}</div>`;
                      }
                 }
              }
@@ -3519,6 +3538,7 @@ ${allTableNames.map(tName => {
             </div>
         `;
         $('body').append(html); bindScrollFade($('.acu-quick-view-body'));
+        bindAcuCellClicks($('.acu-quick-view-overlay'));
 
         const close = () => $('.acu-quick-view-overlay').remove();
         $('#qv-close').click(close);
@@ -3598,25 +3618,59 @@ ${allTableNames.map(tName => {
         setup('.acu-nav-actions-area .acu-action-btn');
     };
 
-    const commitCellValue = async (cell, tableKey, tableName, rowIdx, colIdx, newVal) => {
-        const { $ } = getCore();
-        const $cell = $(cell);
-        $cell.attr('data-val', encodeURIComponent(newVal));
-        $cell.data('val', encodeURIComponent(newVal));
+    const paintCellDisplay = ($cell, newVal) => {
+        const encoded = encodeURIComponent(newVal == null ? '' : String(newVal));
+        $cell.attr('data-val', encoded);
+        $cell.data('val', encoded);
 
         let $displayTarget = $cell;
         if ($cell.hasClass('acu-grid-item')) $displayTarget = $cell.find('.acu-grid-value');
         else if ($cell.hasClass('acu-full-item')) $displayTarget = $cell.find('.acu-full-value');
         else if ($cell.hasClass('acu-inline-item')) $displayTarget = $cell.find('.acu-inline-value');
         else if ($cell.hasClass('acu-editable-title')) $displayTarget = $cell;
+        else if ($cell.find('.acu-dash-stat-val').length) $displayTarget = $cell.find('.acu-dash-stat-val');
+        else if ($cell.find('.acu-dash-cell-value').length) $displayTarget = $cell.find('.acu-dash-cell-value');
 
         const badgeStyle = getBadgeStyle(newVal);
-        if (badgeStyle && !$cell.hasClass('acu-editable-title')) {
+        if (badgeStyle && !$cell.hasClass('acu-editable-title') && !$cell.hasClass('acu-dash-npc-item')) {
             $displayTarget.html(`<span class="acu-badge ${badgeStyle}">${newVal}</span>`);
         } else {
             $displayTarget.text(newVal);
         }
-        $cell.addClass('acu-highlight-changed');
+
+        if ($cell.hasClass('acu-dash-stat-row') || $cell.hasClass('acu-dash-npc-item') || $cell.closest('.acu-quick-view-card').length) {
+            $cell.addClass('acu-dash-changed');
+        } else {
+            $cell.addClass('acu-highlight-changed');
+        }
+
+        const plain = toPlainInsertText(newVal);
+        const $host = ($cell.hasClass('acu-dash-stat-row') || $cell.hasClass('acu-dash-npc-item'))
+            ? $cell
+            : $cell.closest('.acu-qv-row');
+        if (!$host.length) return;
+        const $btn = $host.find('.acu-dash-insert-btn').first();
+        if (!plain) $btn.remove();
+        else if ($btn.length) $btn.attr('data-insert', encodeURIComponent(plain));
+        else $host.append(dashInsertBtn(plain));
+    };
+
+    const syncCellDisplays = (tableName, rowIdx, colIdx, newVal, sourceEl) => {
+        const { $ } = getCore();
+        $('.acu-cell').each(function () {
+            if (sourceEl && this === sourceEl) return;
+            const $el = $(this);
+            if ($el.attr('data-tname') !== String(tableName)) return;
+            if (String($el.attr('data-row')) !== String(rowIdx)) return;
+            if (String($el.attr('data-col')) !== String(colIdx)) return;
+            paintCellDisplay($el, newVal);
+        });
+    };
+
+    const commitCellValue = async (cell, tableKey, tableName, rowIdx, colIdx, newVal) => {
+        const sourceEl = cell && cell.jquery ? cell[0] : cell;
+        paintCellDisplay($(sourceEl), newVal);
+        syncCellDisplays(tableName, rowIdx, colIdx, newVal, sourceEl);
 
         const rawData = getTableData();
         if (rawData && rawData[tableKey]?.content[rowIdx + 1]) {
@@ -3666,25 +3720,72 @@ ${allTableNames.map(tName => {
         });
     };
 
+    const readCellContent = ($cell) => {
+        const raw = $cell.attr('data-val');
+        if (raw == null) return '';
+        try { return decodeURIComponent(raw); } catch (err) { return String(raw); }
+    };
+
+    const paintRowPending = (tableName, rowIdx, pending) => {
+        const { $ } = getCore();
+        if (!$) return;
+        const $card = $(`.acu-data-card[data-row-key="${tableName}-${rowIdx}"]`);
+        if (pending) {
+            if ($card.length && $card.find('.acu-badge-pending').length === 0) {
+                $card.prepend('<div class="acu-badge-pending">待删除</div>');
+            }
+        } else if ($card.length) {
+            $card.find('.acu-badge-pending').remove();
+        }
+        $('.acu-dash-stat-row, .acu-dash-npc-item, .acu-quick-view-card .acu-cell').each(function () {
+            const $el = $(this);
+            if ($el.attr('data-tname') !== String(tableName)) return;
+            if (String($el.attr('data-row')) !== String(rowIdx)) return;
+            $el.toggleClass('acu-dash-pending-delete', !!pending);
+        });
+    };
+
+    const bindAcuCellClicks = ($scope) => {
+        const { $ } = getCore();
+        if (!$) return;
+        const $cells = ($scope && $scope.length) ? $scope.find('.acu-cell') : $('.acu-cell');
+        $cells.off('click.acu_cell').on('click.acu_cell', function (e) {
+            if ($(e.target).closest('.acu-dash-insert-btn, .acu-slot-setting-btn').length) return;
+            if (isMultiSelectMode && $(this).closest('.acu-data-card').length) return;
+            if (!$(this).attr('data-key') || $(this).attr('data-row') == null || $(this).attr('data-col') == null) return;
+            e.stopPropagation();
+            showCellMenu(e, this);
+        });
+    };
+
     const showCellMenu = (e, cell) => {
         const { $ } = getCore();
         $('.acu-cell-menu, .acu-menu-backdrop').remove();
+        if ($(cell).closest('.acu-quick-view-overlay').length) {
+            $('.acu-quick-view-overlay').css('z-index', 2147483640);
+        }
         const backdrop = $('<div class="acu-menu-backdrop"></div>');
         $('body').append(backdrop);
-        const rowIdx = parseInt($(cell).data('row'));
-        const colIdx = parseInt($(cell).data('col'));
-        const tableKey = $(cell).data('key');
-        const tableName = $(cell).data('tname');
-        const content = decodeURIComponent($(cell).data('val'));
+        const rowIdx = parseInt($(cell).attr('data-row'), 10);
+        const colIdx = parseInt($(cell).attr('data-col'), 10);
+        const tableKey = $(cell).attr('data-key');
+        const tableName = $(cell).attr('data-tname');
+        const content = readCellContent($(cell));
+        if (!tableKey || !tableName || Number.isNaN(rowIdx) || Number.isNaN(colIdx)) {
+            backdrop.remove();
+            return;
+        }
         const config = getConfig();
         const deleteKey = `${tableName}-row-${rowIdx}`;
         const cellHistory = getCellHistoryForCell(tableName, rowIdx, colIdx);
+        const isDashSurface = $(cell).hasClass('acu-dash-stat-row') || $(cell).hasClass('acu-dash-npc-item');
 
         const menu = $(`
             <div class="acu-cell-menu acu-theme-${config.theme}">
                 <div class="acu-cell-menu-item" id="act-edit"><i class="fa-solid fa-pen"></i> 编辑内容</div>
                 ${cellHistory.length ? `<div class="acu-cell-menu-item" id="act-history"><i class="fa-solid fa-undo"></i> 以前的内容 (${cellHistory.length})</div>` : ''}
                 <div class="acu-cell-menu-item" id="act-edit-card"><i class="fa-solid fa-edit"></i> 整体编辑</div>
+                ${isDashSurface ? `<div class="acu-cell-menu-item" id="act-quick-view"><i class="fa-solid fa-eye"></i> 查看详情</div>` : ''}
                 <div class="acu-cell-menu-item" id="act-insert" style="color:#2980b9"><i class="fa-solid fa-plus"></i> 插入新行</div>
                 ${pendingDeletes.has(`${tableName}-row-${rowIdx}`) ? `<div class="acu-cell-menu-item" id="act-restore" style="color:#27ae60;"><i class="fa-solid fa-undo"></i> 恢复整行</div>` : `<div class="acu-cell-menu-item" id="act-delete"><i class="fa-solid fa-trash"></i> 删除整行</div>`}
                 <div class="acu-cell-menu-item" id="act-close"><i class="fa-solid fa-times"></i> 关闭菜单</div>
@@ -3720,17 +3821,16 @@ ${allTableNames.map(tName => {
         menu.find('#act-delete').click(() => {
             closeAll();
             pendingDeletes.add(deleteKey);
-            const $card = $(`.acu-data-card[data-row-key="${tableName}-${rowIdx}"]`);
-            if ($card.length && $card.find('.acu-badge-pending').length === 0) {
-                $card.prepend('<div class="acu-badge-pending">待删除</div>');
-            }
+            paintRowPending(tableName, rowIdx, true);
             updateDynamicActionButton();
+            if (!$('#acu-btn-refresh, #acu-btn-refresh-emb').length && window.toastr) {
+                window.toastr.info('已标记待删除。打开任意表格后，点刷新按钮确认删除。');
+            }
         });
         menu.find('#act-restore').click(() => {
             closeAll();
             pendingDeletes.delete(deleteKey);
-            const $card = $(`.acu-data-card[data-row-key="${tableName}-${rowIdx}"]`);
-            $card.find('.acu-badge-pending').remove();
+            paintRowPending(tableName, rowIdx, false);
             updateDynamicActionButton();
         });
 
@@ -3756,8 +3856,21 @@ ${allTableNames.map(tName => {
                 }
             });
         });
+        menu.find('#act-quick-view').click(() => {
+            closeAll();
+            const rawData = getTableData();
+            const processed = rawData ? processJsonData(rawData) : null;
+            const table = processed && processed[tableName];
+            if (!table || !table.rows || !table.rows[rowIdx]) return;
+            const headers = table.headers || [];
+            const codeIdx = headers.findIndex(h => h && (String(h).includes('编码') || String(h).includes('索引')));
+            const titleCol = codeIdx > 0 ? codeIdx : 1;
+            showQuickView(table.rows[rowIdx], headers, tableName, titleCol, rowIdx, table.key);
+        });
+
         menu.find('#act-insert').click(async () => {
             closeAll();
+            $('.acu-quick-view-overlay').remove();
             const rawData = getTableData();
             if (rawData && rawData[tableKey]?.content) {
                 const sheet = rawData[tableKey];
@@ -3848,6 +3961,7 @@ ${allTableNames.map(tName => {
                     }
                 });
                 if (hasChanges) {
+                    $('.acu-quick-view-overlay').remove();
                     const saved = await saveDataToDatabase(currentData, false, false, {
                         type: 'row_edit',
                         tableName: tableName,
@@ -4147,6 +4261,7 @@ ${allTableNames.map(tName => {
                 const stopSelectors = '.acu-data-display, .acu-nav-container, .acu-wrapper, .acu-edit-overlay, .acu-quick-view-overlay, .acu-cell-menu';
                 $('body').off('wheel touchstart touchmove touchend click', stopSelectors);
                 $('body').off('click.acu_autoclose');
+                $('.acu-cell').off('click.acu_cell');
                 $('#send_but').off('click.acu_opt_hide');
                 $('#send_textarea').off('keydown.acu_opt_hide');
                 $(`#${SCRIPT_ID}-styles`).remove();
