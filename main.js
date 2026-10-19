@@ -902,6 +902,12 @@
                 .acu-header-btn#acu-btn-close i { transform: scale(1.3); transition: transform 0.2s; }
 
                 .acu-panel-content { flex: 1; padding: 15px; padding-bottom: 10px; background: transparent;  overflow-y: auto; overflow-x: hidden; }
+                /* 仪表盘面板：内容超出时显示细滚动条，提示可滚动 */
+                .acu-dash-panel-content { scrollbar-width: thin; scrollbar-color: var(--acu-border) transparent; }
+                .acu-dash-panel-content::-webkit-scrollbar { width: 6px; }
+                .acu-dash-panel-content::-webkit-scrollbar-track { background: transparent; }
+                .acu-dash-panel-content::-webkit-scrollbar-thumb { background-color: var(--acu-border); border-radius: 3px; }
+                .acu-dash-panel-content::-webkit-scrollbar-thumb:hover { background-color: var(--acu-text-sub); }
                 .acu-panel-content::-webkit-scrollbar, .acu-dash-container::-webkit-scrollbar, .acu-edit-textarea::-webkit-scrollbar, .acu-card-edit-input::-webkit-scrollbar, .acu-settings-content::-webkit-scrollbar, .acu-quick-view-body::-webkit-scrollbar, .acu-dash-npc-grid::-webkit-scrollbar { width: 6px; height: 6px; }
 
                 .acu-panel-content::-webkit-scrollbar-thumb,
@@ -928,9 +934,10 @@
                 .acu-page-btn:disabled { opacity: 0.5; cursor: not-allowed; }
                 .acu-page-info { font-size: 12px; color: var(--acu-text-sub); margin: 0 10px; }
 
-                .acu-dash-container { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; height: 100%; padding: 0; overflow: hidden; box-sizing: border-box; font-size: var(--acu-dash-font-size, var(--acu-font-size)); } .acu-dash-col { display: flex; flex-direction: column; gap: 0; height: 100%; overflow: hidden; }
+                /* 高度自适应：内容少时撑满面板(min-height:100%)，内容多时随内容增高、由外层滚动，避免被 overflow:hidden 裁切 */
+                .acu-dash-container { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; height: auto; min-height: 100%; padding: 0; overflow: visible; box-sizing: border-box; font-size: var(--acu-dash-font-size, var(--acu-font-size)); } .acu-dash-col { display: flex; flex-direction: column; gap: 0; height: auto; min-height: 100%; overflow: visible; }
                 @media (max-width: 768px) { .acu-dash-container { grid-template-columns: 1fr; overflow-y: auto; display: flex; flex-direction: column; height: auto; } .acu-dash-col { height: auto; flex: none; overflow: visible; } }
-                .acu-dash-card { background: var(--acu-card-bg); border-radius: 0; border: none; padding: 16px; display: flex; flex-direction: column; gap: 12px; box-shadow: none; }
+                .acu-dash-card { background: var(--acu-card-bg); border-radius: 0; border: none; padding: 16px; display: flex; flex-direction: column; gap: 12px; box-shadow: none; overflow: visible; }
                 .acu-dash-empty-group { flex: 0 0 auto; }
                 .acu-dash-empty-add { width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 7px 10px; border-radius: 8px; border: 1px dashed var(--acu-border); background: transparent; color: var(--acu-text-sub); font-size: 12px; line-height: 1; cursor: pointer; transition: all 0.2s; }
                 .acu-dash-empty-add:hover { color: var(--acu-highlight); border-color: var(--acu-highlight); background: var(--acu-btn-hover); }
@@ -940,7 +947,7 @@
                 .acu-dash-stat-row { display: flex; justify-content: space-between; align-items: center; padding: 8px; background: var(--acu-btn-bg); border-radius: 8px; }
                 .acu-dash-stat-label { color: var(--acu-text-sub); font-size: 0.9em; }
                 .acu-dash-stat-val { color: var(--acu-text-main); font-weight: bold; font-size: 1.1em; }
-                .acu-dash-npc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; height: 100%; overflow-y: auto; padding-right: 4px; scrollbar-width: thin; align-content: start; }
+                .acu-dash-npc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; height: auto; overflow-y: visible; padding-right: 4px; align-content: start; }
 
 
                 .acu-dash-npc-item { background: var(--acu-table-head); padding: 10px; border-radius: 8px; cursor: default; text-align: center; border: 1px solid transparent; transition: all 0.2s; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--acu-text-main); font-size: 1em; }
@@ -2086,10 +2093,12 @@ ${allTableNames.map(tName => {
                     </div>
                 `;
 
-                const contentStyle = isCollapsed ? 'height: 0; opacity: 0; padding: 0; overflow: hidden;' : (window.innerWidth <= 768 ? 'height: auto; opacity: 1; padding: 0; overflow: hidden;' : 'height: 500px; opacity: 1; padding: 0; overflow: hidden;');
+                // 展开时允许纵向滚动：内容超出 500px 时不再被裁切
+                const contentStyle = isCollapsed ? 'height: 0; opacity: 0; padding: 0; overflow: hidden;' : (window.innerWidth <= 768 ? 'height: auto; opacity: 1; padding: 0; overflow-x: hidden; overflow-y: auto;' : 'height: 500px; opacity: 1; padding: 0; overflow-x: hidden; overflow-y: auto;');
                 const contentWrapperHtml = `
                     <div class="acu-dash-content-wrapper" style="
-                        overflow: hidden;
+                        overflow-x: hidden;
+                        overflow-y: auto;
                         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
                         background: var(--acu-bg-nav);
                         border: 1px solid var(--acu-border);
@@ -2522,7 +2531,7 @@ ${allTableNames.map(tName => {
             if (cfg.sortOrder === 'desc') items.reverse();
             const itemsHtml = items.join('');
 
-            return `<div class="acu-dash-char-info" style="display:flex; flex-direction:column; gap:8px; overflow-y: auto; height: 100%; padding-right: 4px;">${itemsHtml}</div>`;
+            return `<div class="acu-dash-char-info" style="display:flex; flex-direction:column; gap:8px; overflow-y: visible; height: auto; padding-right: 4px;">${itemsHtml}</div>`;
         };
 
         const renderSecondColCapsules = (slotId) => {
@@ -2563,8 +2572,7 @@ ${allTableNames.map(tName => {
             if (cfg.sortOrder === 'desc') items.reverse();
             const itemsHtml = items.join('');
 
-            const noLimitSlots = ['slot_tab1', 'slot_tab1_2', 'slot_tab1_3'];
-            const customStyle = 'height: 100%; ' + gridStyleOverride + (window.innerWidth <= 768 ? 'max-height: 200px;' : '');
+            const customStyle = 'height: auto; ' + gridStyleOverride;
 
             return `<div class="acu-dash-npc-grid acu-no-scrollbar" style="${customStyle}">${itemsHtml}</div>`;
         };
@@ -2656,9 +2664,9 @@ ${allTableNames.map(tName => {
 
                 const flexStyle = 'flex: 1 1 auto;';
 
-            return `<div class="acu-dash-card" style="${minHeight ? 'min-height:'+minHeight+';' : ''} width:100%; box-sizing:border-box; display:flex; flex-direction:column; padding:0; overflow:hidden; gap:0; ${flexStyle} min-height: 0;">
+            return `<div class="acu-dash-card" style="${minHeight ? 'min-height:'+minHeight+';' : ''} width:100%; box-sizing:border-box; display:flex; flex-direction:column; padding:0; overflow:visible; gap:0; ${flexStyle} min-height: 0;">
                 <div style="padding:10px 16px 0 16px;">${header}</div>
-                <div class="acu-no-scrollbar" style="padding:6px 16px 16px 16px; flex:1; overflow-y:auto;">${body}</div>
+                <div class="acu-no-scrollbar" style="padding:6px 16px 16px 16px; flex:1 1 auto; overflow-y:visible;">${body}</div>
             </div>`;
         };
 
@@ -2720,7 +2728,7 @@ ${allTableNames.map(tName => {
                 </div>
             </div>
 
-            <div class="acu-panel-content acu-no-scrollbar" style="overflow-y:auto; padding:0;">
+            <div class="acu-panel-content acu-dash-panel-content" style="overflow-y:auto; padding:0;">
                 ${content}
             </div>
         `;
