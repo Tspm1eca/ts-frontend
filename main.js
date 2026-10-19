@@ -931,6 +931,10 @@
                 .acu-dash-container { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; height: 100%; padding: 0; overflow: hidden; box-sizing: border-box; font-size: var(--acu-dash-font-size, var(--acu-font-size)); } .acu-dash-col { display: flex; flex-direction: column; gap: 0; height: 100%; overflow: hidden; }
                 @media (max-width: 768px) { .acu-dash-container { grid-template-columns: 1fr; overflow-y: auto; display: flex; flex-direction: column; height: auto; } .acu-dash-col { height: auto; flex: none; overflow: visible; } }
                 .acu-dash-card { background: var(--acu-card-bg); border-radius: 0; border: none; padding: 16px; display: flex; flex-direction: column; gap: 12px; box-shadow: none; }
+                .acu-dash-empty-group { flex: 0 0 auto; }
+                .acu-dash-empty-add { width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 7px 10px; border-radius: 8px; border: 1px dashed var(--acu-border); background: transparent; color: var(--acu-text-sub); font-size: 12px; line-height: 1; cursor: pointer; transition: all 0.2s; }
+                .acu-dash-empty-add:hover { color: var(--acu-highlight); border-color: var(--acu-highlight); background: var(--acu-btn-hover); }
+                .acu-dash-empty-add i { font-size: 11px; }
                 .acu-dash-title { font-size: var(--acu-dash-font-size, var(--acu-font-size)); font-weight: bold; color: var(--acu-text-main); border-bottom: 1px dashed var(--acu-border); padding-bottom: 8px; margin-bottom: 4px; display: flex; justify-content: center; align-items: center; }
                 .acu-dash-char-info { display: flex; flex-direction: column; gap: 10px; } @media (min-width: 769px) { .acu-dash-top-kv { display: grid !important; grid-template-columns: 1fr 1fr; } }
                 .acu-dash-stat-row { display: flex; justify-content: space-between; align-items: center; padding: 8px; background: var(--acu-btn-bg); border-radius: 8px; }
@@ -2606,11 +2610,25 @@ ${allTableNames.map(tName => {
         const getTabEditBtn = (sid) => isDashEditing ?
              `<button class="acu-slot-setting-btn" data-slot="${sid}" style="margin-left:5px; width:20px; height:20px; border-radius:50%; background:var(--acu-btn-active-bg); color:#fff; border:none; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;"><i class="fa-solid fa-cog" style="font-size:10px;"></i></button>` : '';
 
-        const render3In1Group = (groupId, slotIds, minHeight, isAutoHeight) => {
-            let visibleIds = slotIds.filter(id => !getSlotCfg(id).isEmpty);
-            if (isDashEditing) visibleIds = slotIds;
+        // 整组卡槽都未配置时，编辑模式下只渲染一条紧凑的“添加”条（不占用已配置卡片的高度）
+        const renderEmptyGroupBar = (slotIds) => {
+            const targetSlot = slotIds.find(id => getSlotCfg(id).isEmpty) || slotIds[0];
+            return `<div class="acu-dash-empty-group" style="flex:0 0 auto; width:100%; box-sizing:border-box; padding:6px 16px;">
+                <button class="acu-slot-setting-btn acu-dash-empty-add" data-slot="${targetSlot}">
+                    <i class="fa-solid fa-plus"></i><span>未配置 · 点击添加</span>
+                </button>
+            </div>`;
+        };
 
-            if (visibleIds.length === 0) return '';
+        const render3In1Group = (groupId, slotIds, minHeight, isAutoHeight) => {
+            const configuredIds = slotIds.filter(id => !getSlotCfg(id).isEmpty);
+
+            // 整组未配置：正常模式完全不渲染；编辑模式只留紧凑添加条，避免挤占已配置卡片空间
+            if (configuredIds.length === 0) {
+                return isDashEditing ? renderEmptyGroupBar(slotIds) : '';
+            }
+
+            const visibleIds = isDashEditing ? slotIds : configuredIds;
 
             let header = '<div class="acu-tab-header">';
             let body = '<div class="acu-tab-content-container" style="flex:1;">';
@@ -2619,6 +2637,10 @@ ${allTableNames.map(tName => {
             if (dashChangesEnabled() && !isDashEditing) {
                 const changedAt = visibleIds.findIndex(sid => slotShowsChange(tables, getSlotCfg(sid)));
                 if (changedAt >= 0) activeIndex = changedAt;
+            } else if (isDashEditing) {
+                // 编辑模式下优先定位到已配置的卡槽，避免默认停在空卡槽的“点击配置”占位
+                const firstConfigured = visibleIds.findIndex(sid => !getSlotCfg(sid).isEmpty);
+                if (firstConfigured >= 0) activeIndex = firstConfigured;
             }
 
             visibleIds.forEach((sid, i) => {
