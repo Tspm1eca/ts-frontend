@@ -2493,7 +2493,7 @@ ${allTableNames.map(tName => {
                 }
             }
 
-            let itemsHtml = '';
+            const items = [];
             const colsToShow = (cfg.showCols && cfg.showCols.length > 0) ? cfg.showCols.map(Number) : null;
 
             targetRow.forEach((cell, idx) => {
@@ -2504,15 +2504,19 @@ ${allTableNames.map(tName => {
                 if (cell !== undefined && cell !== null && String(cell).trim() !== '') {
                     const changed = dashChangesEnabled() && cellTouched(key, targetRowIdx, idx);
                     const insertText = toPlainInsertText(cell);
-                    itemsHtml += `
+                    items.push(`
                         <div class="acu-dash-stat-row${changed ? ' acu-dash-changed' : ''}" style="display:flex; justify-content:flex-start; align-items:center; padding:8px 10px; background:var(--acu-btn-bg); border-radius:8px; border:1px solid transparent; width:100%; box-sizing:border-box;">
                             <span class="acu-dash-stat-label" style="font-size:1em; margin-right:8px; white-space:normal; overflow-wrap:break-word; flex-shrink:0; width:90px;">${label}</span>
                             <span class="acu-dash-stat-val" style="color:var(--acu-text-main); font-weight:bold; font-size:1em; white-space:pre-wrap; word-break:break-word; text-align:left;">${cell}</span>
                             ${dashInsertBtn(insertText)}
                         </div>
-                    `;
+                    `);
                 }
             });
+
+            // 显示顺序：asc 保持原顺序，desc 倒序
+            if (cfg.sortOrder === 'desc') items.reverse();
+            const itemsHtml = items.join('');
 
             return `<div class="acu-dash-char-info" style="display:flex; flex-direction:column; gap:8px; overflow-y: auto; height: 100%; padding-right: 4px;">${itemsHtml}</div>`;
         };
@@ -2541,15 +2545,19 @@ ${allTableNames.map(tName => {
                 iconHtml = `<i class="fa-solid ${iconClass}" style="margin-right:6px; opacity:0.7; font-size:0.9em;"></i>`;
             }
 
-            let itemsHtml = '';
+            const items = [];
             table.rows.forEach((row, rIdx) => {
                 const val = row[targetColIdx] !== undefined ? row[targetColIdx] : '';
                 if (val && String(val).trim() !== '') {
                     const flexStyle = capCols === 2 ? 'display:flex; align-items:center; justify-content:center;' : '';
                     const changed = dashChangesEnabled() && rowTouched(key, rIdx, row);
-                    itemsHtml += `<div class="acu-dash-npc-item acu-dash-interactive${changed ? ' acu-dash-changed' : ''}" data-tname="${key}" data-row="${rIdx}" data-col="${targetColIdx}" style="cursor:pointer; padding:10px 10px; background:var(--acu-table-head); border-radius:8px; border:1px solid transparent; font-size:0.9em; font-weight:500; transition:all 0.2s; ${flexStyle}">${iconHtml}${val}${dashInsertBtn(toPlainInsertText(val))}</div>`;
+                    items.push(`<div class="acu-dash-npc-item acu-dash-interactive${changed ? ' acu-dash-changed' : ''}" data-tname="${key}" data-row="${rIdx}" data-col="${targetColIdx}" style="cursor:pointer; padding:10px 10px; background:var(--acu-table-head); border-radius:8px; border:1px solid transparent; font-size:0.9em; font-weight:500; transition:all 0.2s; ${flexStyle}">${iconHtml}${val}${dashInsertBtn(toPlainInsertText(val))}</div>`);
                 }
             });
+
+            // 显示顺序：asc 保持原顺序，desc 倒序
+            if (cfg.sortOrder === 'desc') items.reverse();
+            const itemsHtml = items.join('');
 
             const noLimitSlots = ['slot_tab1', 'slot_tab1_2', 'slot_tab1_3'];
             const customStyle = 'height: 100%; ' + gridStyleOverride + (window.innerWidth <= 768 ? 'max-height: 200px;' : '');
@@ -3950,6 +3958,14 @@ ${allTableNames.map(tName => {
                             </select>
                         </div>
 
+                        <div id="set-order-area" style="display:none;">
+                            <label style="font-weight:bold; display:block; margin-bottom:5px;">显示顺序</label>
+                            <select id="slot-sort-order" class="acu-nice-select" style="width:100%">
+                                <option value="asc" ${currentSlotCfg.sortOrder !== 'desc' ? 'selected' : ''}>顺序（默认）</option>
+                                <option value="desc" ${currentSlotCfg.sortOrder === 'desc' ? 'selected' : ''}>倒序</option>
+                            </select>
+                        </div>
+
                         <!-- 3. 卡片展示自定义设置 -->
                         <div id="set-kv-area" style="display:none; flex-direction:column; gap:15px;">
                             <div>
@@ -3999,6 +4015,7 @@ ${allTableNames.map(tName => {
                 dialog.find('#slot-cap-col').empty();
                 dialog.find('#set-kv-area').hide();
                 dialog.find('#set-cap-area').hide();
+                dialog.find('#set-order-area').hide();
                 return;
             }
 
@@ -4046,6 +4063,9 @@ ${allTableNames.map(tName => {
                 });
             }
 
+            dialog.find('#slot-sort-order').val(currentSlotCfg.sortOrder === 'desc' ? 'desc' : 'asc');
+            dialog.find('#set-order-area').show();
+
             if (rule === 'kv') {
                 dialog.find('#set-kv-area').show();
                 dialog.find('#set-cap-area').hide();
@@ -4089,6 +4109,7 @@ ${allTableNames.map(tName => {
             currentDashCfg[slotId].title = newTitle;
             currentDashCfg[slotId].text = newText;
             currentDashCfg[slotId].rule = newRule;
+            currentDashCfg[slotId].sortOrder = dialog.find('#slot-sort-order').val() === 'desc' ? 'desc' : 'asc';
 
             if (newRule === 'kv') {
                 currentDashCfg[slotId].card = dialog.find('#slot-kv-card').val();
