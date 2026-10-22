@@ -314,7 +314,18 @@
             return m ? m.length : 0;
         }
     };
-    const charCountBadgeHtml = (text) => `<span class="acu-cell-char-count" title="中文字数">${countHanChars(text)}字</span>`;
+    // 字数分级：<600 红 / 600-799 黄 / >=800 绿
+    const CHAR_COUNT_THRESHOLDS = { mid: 600, high: 800 };
+    const getCharCountLevel = (n) => {
+        if (n >= CHAR_COUNT_THRESHOLDS.high) return { key: 'high', label: '充足' };
+        if (n >= CHAR_COUNT_THRESHOLDS.mid) return { key: 'mid', label: '偏少' };
+        return { key: 'low', label: '不足' };
+    };
+    const charCountBadgeHtml = (text) => {
+        const n = countHanChars(text);
+        const level = getCharCountLevel(n);
+        return `<span class="acu-cell-char-count acu-char-count-${level.key}" title="${level.label}：${n} 中文字">${n}字</span>`;
+    };
 
     const getChatIsolationKey = () => {
         try {
@@ -1085,6 +1096,12 @@
                 .acu-inline-value { display: inline; color: var(--acu-text-main); font-size: var(--acu-font-size, 13px); line-height: 1.4; word-break: break-word; white-space: pre-wrap; }
                 .acu-cell-char-count { display: inline-block; margin-left: 8px; padding: 0 6px; border-radius: 8px; background: var(--acu-badge-bg, var(--acu-table-head)); color: var(--acu-text-sub); font-size: calc(var(--acu-font-size, 13px) - 2px); font-weight: normal; line-height: 1.5; white-space: nowrap; vertical-align: middle; user-select: none; }
                 .acu-full-label .acu-cell-char-count, .acu-grid-label .acu-cell-char-count { margin-left: 6px; text-transform: none; letter-spacing: normal; }
+                .acu-cell-char-count.acu-char-count-low { background: rgba(231, 76, 60, 0.16); color: #e74c3c; border: 1px solid rgba(231, 76, 60, 0.55); font-weight: 600; }
+                .acu-cell-char-count.acu-char-count-mid { background: rgba(241, 196, 15, 0.18); color: #d4a017; border: 1px solid rgba(241, 196, 15, 0.6); font-weight: 600; }
+                .acu-cell-char-count.acu-char-count-high { background: rgba(39, 174, 96, 0.16); color: #27ae60; border: 1px solid rgba(39, 174, 96, 0.55); font-weight: 600; }
+                .acu-theme-dark .acu-cell-char-count.acu-char-count-low, .acu-theme-cyber .acu-cell-char-count.acu-char-count-low, .acu-theme-aurora .acu-cell-char-count.acu-char-count-low, .acu-theme-starship .acu-cell-char-count.acu-char-count-low { color: #ff7b6b; }
+                .acu-theme-dark .acu-cell-char-count.acu-char-count-mid, .acu-theme-cyber .acu-cell-char-count.acu-char-count-mid, .acu-theme-aurora .acu-cell-char-count.acu-char-count-mid, .acu-theme-starship .acu-cell-char-count.acu-char-count-mid { color: #ffd54f; }
+                .acu-theme-dark .acu-cell-char-count.acu-char-count-high, .acu-theme-cyber .acu-cell-char-count.acu-char-count-high, .acu-theme-aurora .acu-cell-char-count.acu-char-count-high, .acu-theme-starship .acu-cell-char-count.acu-char-count-high { color: #5ee08a; }
                 .acu-grid-item.acu-highlight-changed,
                 .acu-full-item.acu-highlight-changed,
                 .acu-inline-item.acu-highlight-changed,
@@ -3679,9 +3696,10 @@ ${allTableNames.map(tName => {
         }
 
         if ($cell.hasClass('acu-cell') && shouldShowCharCount(tableName, $cell.find('.acu-inline-label, .acu-full-label, .acu-grid-label').first().text())) {
-            let $badge = $cell.children('.acu-cell-char-count');
-            if (!$badge.length) $badge = $(charCountBadgeHtml(newVal)).appendTo($cell);
-            else $badge.text(`${countHanChars(newVal)}字`);
+            const $fresh = $(charCountBadgeHtml(newVal));
+            const $badge = $cell.children('.acu-cell-char-count');
+            if ($badge.length) $badge.replaceWith($fresh);
+            else $fresh.appendTo($cell);
         }
         $cell.addClass('acu-highlight-changed');
 
