@@ -3,7 +3,7 @@
     'use strict';
 
     const REPO = 'Tspm1eca/ts-frontend';
-    const BRANCH = 'master';
+    const BRANCH = 'TMP';
     const FILE = 'main.js';
     const book = window;
 

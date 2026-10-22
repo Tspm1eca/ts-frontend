@@ -297,6 +297,25 @@
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
 
+    // 「纪要表」中名为「纪要」的子类格子显示中文字数
+    const CHAR_COUNT_TABLE = '纪要表';
+    const CHAR_COUNT_FIELD = '纪要';
+    const shouldShowCharCount = (tableName, headerName) => {
+        if (!tableName || !headerName) return false;
+        return String(tableName).trim() === CHAR_COUNT_TABLE && String(headerName).trim() === CHAR_COUNT_FIELD;
+    };
+    const countHanChars = (text) => {
+        const s = String(text == null ? '' : text);
+        try {
+            const m = s.match(/\p{Script=Han}/gu);
+            return m ? m.length : 0;
+        } catch (e) {
+            const m = s.match(/[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/g);
+            return m ? m.length : 0;
+        }
+    };
+    const charCountBadgeHtml = (text) => `<span class="acu-cell-char-count" title="中文字数">${countHanChars(text)}字</span>`;
+
     const getChatIsolationKey = () => {
         try {
             const w = window.parent || window;
@@ -1064,6 +1083,8 @@
                 .acu-inline-label { display: inline; color: var(--acu-text-sub); font-weight: bold; font-size: var(--acu-font-size, 13px); line-height: 1.4; margin-right: 4px; }
                 .acu-inline-label::after { content: '：'; }
                 .acu-inline-value { display: inline; color: var(--acu-text-main); font-size: var(--acu-font-size, 13px); line-height: 1.4; word-break: break-word; white-space: pre-wrap; }
+                .acu-cell-char-count { display: inline-block; margin-left: 8px; padding: 0 6px; border-radius: 8px; background: var(--acu-badge-bg, var(--acu-table-head)); color: var(--acu-text-sub); font-size: calc(var(--acu-font-size, 13px) - 2px); font-weight: normal; line-height: 1.5; white-space: nowrap; vertical-align: middle; user-select: none; }
+                .acu-full-label .acu-cell-char-count, .acu-grid-label .acu-cell-char-count { margin-left: 6px; text-transform: none; letter-spacing: normal; }
                 .acu-grid-item.acu-highlight-changed,
                 .acu-full-item.acu-highlight-changed,
                 .acu-inline-item.acu-highlight-changed,
@@ -3019,18 +3040,19 @@ ${allTableNames.map(tName => {
                     const cellHighlight = isCellChanged && config.highlightNew ? 'acu-highlight-changed' : '';
                     const dataAttrs = `data-key="${tableData.key}" data-tname="${tableName}" data-row="${realIndex}" data-col="${cIdx}" data-val="${encodeURIComponent(cell)}"`;
                     const contentHtml = badgeStyle ? `<span class="acu-badge ${badgeStyle}">${displayCell}</span>` : displayCell;
+                    const charCountHtml = shouldShowCharCount(tableName, headerName) ? charCountBadgeHtml(cell) : '';
 
                     if (isListMode) {
-                         fullHtml += `<div class="acu-cell acu-inline-item ${cellHighlight}" ${dataAttrs}><div class="acu-inline-label">${headerName}</div><div class="acu-inline-value">${contentHtml}</div></div>`;
+                         fullHtml += `<div class="acu-cell acu-inline-item ${cellHighlight}" ${dataAttrs}><div class="acu-inline-label">${headerName}</div><div class="acu-inline-value">${contentHtml}</div>${charCountHtml}</div>`;
                     } else {
                          if (codeIdx > 0) {
-                             fullHtml += `<div class="acu-cell acu-full-item ${cellHighlight}" ${dataAttrs}><div class="acu-full-label">${headerName}</div><div class="acu-full-value">${displayCell}</div></div>`;
+                             fullHtml += `<div class="acu-cell acu-full-item ${cellHighlight}" ${dataAttrs}><div class="acu-full-label">${headerName}</div><div class="acu-full-value">${displayCell}</div>${charCountHtml}</div>`;
                          } else {
                             if (cellStr.length > 50) {
-                                fullHtml += `<div class="acu-cell acu-full-item ${cellHighlight}" ${dataAttrs}><div class="acu-full-label">${headerName}</div><div class="acu-full-value">${displayCell}</div></div>`;
+                                fullHtml += `<div class="acu-cell acu-full-item ${cellHighlight}" ${dataAttrs}><div class="acu-full-label">${headerName}</div><div class="acu-full-value">${displayCell}</div>${charCountHtml}</div>`;
                             }
                             else {
-                                gridHtml += `<div class="acu-cell acu-grid-item ${cellHighlight}" ${dataAttrs}><div class="acu-grid-label">${headerName}</div><div class="acu-grid-value">${contentHtml}</div></div>`;
+                                gridHtml += `<div class="acu-cell acu-grid-item ${cellHighlight}" ${dataAttrs}><div class="acu-grid-label">${headerName}</div><div class="acu-grid-value">${contentHtml}</div>${charCountHtml}</div>`;
                             }
                          }
                     }
@@ -3529,14 +3551,15 @@ ${allTableNames.map(tName => {
                 const changed = dashChangesEnabled() && rowIdx !== undefined && rowIdx !== null && cellTouched(tableName, rowIdx, cIdx);
                 const changedClass = changed ? ' acu-dash-changed' : '';
                 const insertBtn = dashInsertBtn(toPlainInsertText(displayCell));
+                const charCountHtml = shouldShowCharCount(tableName, headerName) ? charCountBadgeHtml(cell) : '';
 
                 if (currentStyle === 'list' || codeIdx > 0) {
-                     fullHtml += `<div class="acu-qv-row"><div class="acu-cell acu-inline-item${changedClass}" style="cursor:default"><div class="acu-inline-label">${headerName}</div><div class="acu-inline-value">${contentHtml}</div></div>${insertBtn}</div>`;
+                     fullHtml += `<div class="acu-qv-row"><div class="acu-cell acu-inline-item${changedClass}" style="cursor:default"><div class="acu-inline-label">${headerName}</div><div class="acu-inline-value">${contentHtml}</div>${charCountHtml}</div>${insertBtn}</div>`;
                 } else {
                      if (cellStr.length > 50) {
-                        fullHtml += `<div class="acu-qv-row"><div class="acu-cell acu-full-item${changedClass}" style="cursor:default"><div class="acu-full-label">${headerName}</div><div class="acu-full-value">${displayCell}</div></div>${insertBtn}</div>`;
+                        fullHtml += `<div class="acu-qv-row"><div class="acu-cell acu-full-item${changedClass}" style="cursor:default"><div class="acu-full-label">${headerName}</div><div class="acu-full-value">${displayCell}</div>${charCountHtml}</div>${insertBtn}</div>`;
                      } else {
-                        gridHtml += `<div class="acu-qv-row"><div class="acu-cell acu-grid-item${changedClass}" style="cursor:default"><div class="acu-grid-label">${headerName}</div><div class="acu-grid-value">${contentHtml}</div></div>${insertBtn}</div>`;
+                        gridHtml += `<div class="acu-qv-row"><div class="acu-cell acu-grid-item${changedClass}" style="cursor:default"><div class="acu-grid-label">${headerName}</div><div class="acu-grid-value">${contentHtml}</div>${charCountHtml}</div>${insertBtn}</div>`;
                      }
                 }
              }
@@ -3653,6 +3676,12 @@ ${allTableNames.map(tName => {
             $displayTarget.html(`<span class="acu-badge ${badgeStyle}">${newVal}</span>`);
         } else {
             $displayTarget.text(newVal);
+        }
+
+        if ($cell.hasClass('acu-cell') && shouldShowCharCount(tableName, $cell.find('.acu-inline-label, .acu-full-label, .acu-grid-label').first().text())) {
+            let $badge = $cell.children('.acu-cell-char-count');
+            if (!$badge.length) $badge = $(charCountBadgeHtml(newVal)).appendTo($cell);
+            else $badge.text(`${countHanChars(newVal)}字`);
         }
         $cell.addClass('acu-highlight-changed');
 
