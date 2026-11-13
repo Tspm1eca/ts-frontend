@@ -8,6 +8,8 @@
     }
 
     const SCRIPT_ID = 'acu_visualizer_ui_v20_pagination';
+    // 版本号：儀表盤標題右側顯示，用於確認酒館是否已載入最新版
+    const ACU_UI_VERSION = 'v21.0';
     const STORAGE_KEY_TABLE_ORDER = 'acu_table_order';
     const STORAGE_KEY_ACTION_ORDER = 'acu_action_order';
     const STORAGE_KEY_ACTIVE_TAB = 'acu_active_tab';
@@ -2129,6 +2131,7 @@ ${allTableNames.map(tName => {
                         <div style="display:flex; align-items:center; gap:8px;">
                              <i class="fa-solid fa-tachometer-alt" style="color:var(--acu-highlight);"></i>
                              <span class="acu-dash-ctrl-title" style="font-weight: bold; color: var(--acu-title-color); font-size: 13px;">仪表盘</span>
+                             <span class="acu-dash-version" style="font-size: 11px; color: var(--acu-text-sub); opacity: 0.7; font-weight: normal;">${ACU_UI_VERSION}</span>
                         </div>
                         <div style="display:flex; align-items:center; gap:8px;">
                             <button id="acu-btn-dash-edit-emb" title="编辑布局" style="background:transparent; border:none; color:var(--acu-text-sub); cursor:pointer; padding:0 4px; height:16px; display:${isCollapsed ? 'none' : 'inline-flex'}; align-items:center;"><i class="fa-solid ${isDashEditing ? 'fa-check' : 'fa-edit'}" style="${isDashEditing ? 'color:var(--acu-highlight)' : ''}"></i></button>
@@ -2753,6 +2756,7 @@ ${allTableNames.map(tName => {
             <div class="acu-panel-header">
                 <div class="acu-panel-title${dashboardHasChanges(tables) ? ' acu-dash-header-changed' : ''}">
                     <i class="fa-solid fa-tachometer-alt"></i> 仪表盘
+                    <span class="acu-dash-version" style="font-size: 11px; margin-left: 6px; color: var(--acu-text-sub); opacity: 0.7; font-weight: normal;">${ACU_UI_VERSION}</span>
                     ${isDashEditing ? '<span style="font-size:12px; margin-left:10px; color:var(--acu-highlight); background:var(--acu-highlight-bg); padding:2px 8px; border-radius:4px;">编辑模式</span>' : ''}
                 </div>
                 <div class="acu-header-actions">
