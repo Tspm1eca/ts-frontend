@@ -9,7 +9,7 @@
 
     const SCRIPT_ID = 'acu_visualizer_ui_v20_pagination';
     // 版本号：儀表盤標題右側顯示，用於確認酒館是否已載入最新版
-    const ACU_UI_VERSION = 'v21.0';
+    const ACU_UI_VERSION = 'v21.1';
     const STORAGE_KEY_TABLE_ORDER = 'acu_table_order';
     const STORAGE_KEY_ACTION_ORDER = 'acu_action_order';
     const STORAGE_KEY_ACTIVE_TAB = 'acu_active_tab';
@@ -2564,7 +2564,7 @@ ${allTableNames.map(tName => {
                     const changed = dashChangesEnabled() && cellTouched(key, targetRowIdx, idx);
                     const insertText = toPlainInsertText(cell);
                     items.push(`
-                        <div class="acu-dash-stat-row${changed ? ' acu-dash-changed' : ''}" style="display:flex; justify-content:flex-start; align-items:center; padding:8px 10px; background:var(--acu-btn-bg); border-radius:8px; border:1px solid transparent; width:100%; box-sizing:border-box;">
+                        <div class="acu-dash-stat-row acu-dash-data-item${changed ? ' acu-dash-changed' : ''}" data-tname="${key}" data-row="${targetRowIdx}" data-col="${idx}" style="display:flex; justify-content:flex-start; align-items:center; padding:8px 10px; background:var(--acu-btn-bg); border-radius:8px; border:1px solid transparent; width:100%; box-sizing:border-box;">
                             <span class="acu-dash-stat-label" style="font-size:1em; margin-right:8px; white-space:normal; overflow-wrap:break-word; flex-shrink:0; width:90px;">${label}</span>
                             <span class="acu-dash-stat-val" style="color:var(--acu-text-main); font-weight:bold; font-size:1em; white-space:pre-wrap; word-break:break-word; text-align:left;">${cell}</span>
                             ${dashInsertBtn(insertText)}
@@ -2610,7 +2610,7 @@ ${allTableNames.map(tName => {
                 if (val && String(val).trim() !== '') {
                     const flexStyle = capCols === 2 ? 'display:flex; align-items:center; justify-content:center;' : '';
                     const changed = dashChangesEnabled() && rowTouched(key, rIdx, row);
-                    items.push(`<div class="acu-dash-npc-item acu-dash-interactive${changed ? ' acu-dash-changed' : ''}" data-tname="${key}" data-row="${rIdx}" data-col="${targetColIdx}" style="cursor:pointer; padding:10px 10px; background:var(--acu-table-head); border-radius:8px; border:1px solid transparent; font-size:0.9em; font-weight:500; transition:all 0.2s; ${flexStyle}">${iconHtml}${val}${dashInsertBtn(toPlainInsertText(val))}</div>`);
+                    items.push(`<div class="acu-dash-npc-item acu-dash-interactive acu-dash-data-item${changed ? ' acu-dash-changed' : ''}" data-tname="${key}" data-row="${rIdx}" data-col="${targetColIdx}" style="cursor:pointer; padding:10px 10px; background:var(--acu-table-head); border-radius:8px; border:1px solid transparent; font-size:0.9em; font-weight:500; transition:all 0.2s; ${flexStyle}">${iconHtml}${val}${dashInsertBtn(toPlainInsertText(val))}</div>`);
                 }
             });
 
@@ -3183,17 +3183,11 @@ ${allTableNames.map(tName => {
         });
 
         const bindDynamicContentEvents = () => {
-            // 仪表盘格子右键菜单（编辑 / 删除）
-            $('.acu-dash-card').off('contextmenu.acu_dash').on('contextmenu.acu_dash', function(e) {
-                const $card = $(this);
-                if ($card.find('.acu-tab-btn').length === 0) return;
+            // 仪表盘数据格子右键菜单（编辑 / 删除）
+            $('.acu-dash-data-item').off('contextmenu.acu_dash').on('contextmenu.acu_dash', function(e) {
                 e.preventDefault();
                 e.stopPropagation();
-                let slotId = $(e.target).closest('.acu-tab-btn').data('slot');
-                if (!slotId) slotId = $card.find('.acu-tab-btn.active').data('slot');
-                if (!slotId) slotId = $card.find('.acu-tab-btn').first().data('slot');
-                if (!slotId) return;
-                showDashboardSlotMenu(e, slotId);
+                showDashboardItemMenu(e, this);
             });
             $('.acu-cell').off('click').on('click', function(e) { if(isMultiSelectMode) return; e.stopPropagation(); showCellMenu(e, this); });
              $('.acu-dash-interactive').off('click').on('click', function(e) {
@@ -3889,12 +3883,18 @@ ${allTableNames.map(tName => {
         });
     };
 
-    const showDashboardSlotMenu = (e, slotId) => {
+    const showDashboardItemMenu = (e, itemEl) => {
         const { $ } = getCore();
         $('.acu-cell-menu, .acu-menu-backdrop').remove();
         const backdrop = $('<div class="acu-menu-backdrop"></div>');
         $('body').append(backdrop);
         const config = getConfig();
+
+        const $item = $(itemEl);
+        const tname = $item.data('tname');
+        const rowIdx = parseInt($item.data('row'));
+        const colIdx = parseInt($item.data('col'));
+        if (!tname || isNaN(rowIdx) || isNaN(colIdx)) { backdrop.remove(); return; }
 
         const menu = $('<div class="acu-cell-menu acu-theme-' + config.theme + '">' +
             '<div class="acu-cell-menu-item" id="dash-act-edit"><i class="fa-solid fa-pen"></i> 编辑</div>' +
@@ -3919,15 +3919,36 @@ ${allTableNames.map(tName => {
 
         menu.find('#dash-act-edit').click(() => {
             closeAll();
-            showDashSlotSettings(slotId);
+            const rawData = getTableData();
+            const processed = rawData ? processJsonData(rawData) : null;
+            const t = processed ? processed[tname] : null;
+            if (!t || !t.key) return;
+            const sheetId = t.key;
+            const curVal = (rawData[sheetId] && rawData[sheetId].content[rowIdx + 1]) ? rawData[sheetId].content[rowIdx + 1][colIdx] : '';
+            showEditDialog(curVal === undefined ? '' : String(curVal), async (newVal) => {
+                if (String(curVal === undefined ? '' : curVal) === String(newVal)) return;
+                const rd = getTableData();
+                if (!rd || !rd[sheetId] || !rd[sheetId].content[rowIdx + 1]) return;
+                rd[sheetId].content[rowIdx + 1][colIdx] = newVal;
+                const saved = await saveDataToDatabase(rd, false, false, {
+                    type: 'cell_edit',
+                    tableName: tname,
+                    rowIndex: rowIdx,
+                    colIndex: colIdx,
+                    newValue: newVal
+                });
+                if (saved) { rememberCellValue(tname, rowIdx, colIdx, curVal, true); commitCellHistory(); }
+            });
         });
-        menu.find('#dash-act-delete').click(() => {
+        menu.find('#dash-act-delete').click(async () => {
             closeAll();
-            if (!confirm('确定要删除此格子吗？')) return;
-            const dashCfg = getDashConfig() || {};
-            dashCfg[slotId] = { isEmpty: true };
-            saveDashConfig(dashCfg);
-            renderInterface(false);
+            if (!confirm('确定要删除此项吗？（会删除该行数据）')) return;
+            const api = getCore().getDB();
+            if (!api || !api.deleteRow) return;
+            await api.deleteRow(tname, rowIdx + 1);
+            cachedTableData = null;
+            if (window.toastr) window.toastr.success('删除成功');
+            renderInterface(true);
         });
     };
     const showCardEditModal = (row, headers, tableName, rowIndex, tableKey) => {
