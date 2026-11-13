@@ -1121,7 +1121,7 @@
                 .acu-cell-menu { position: fixed !important; background: var(--acu-menu-bg) !important; border: 1px solid var(--acu-border) !important; color: var(--acu-text-main) !important; box-shadow: 0 6px 20px var(--acu-shadow) !important; z-index: 2147483647 !important; border-radius: 8px; overflow: hidden; min-width: 150px; backdrop-filter: blur(5px); }
                 .acu-cell-menu-item { padding: 12px 16px; cursor: pointer; font-size: 14px; display: flex; gap: 12px; align-items: center; color: var(--acu-text-main); font-weight: 500; background: transparent; }
                 .acu-cell-menu-item:hover { background-color: var(--acu-table-hover); }
-                .acu-cell-menu-item#act-delete { color: #e74c3c; }
+                .acu-cell-menu-item#act-delete, .acu-cell-menu-item#dash-act-delete { color: #e74c3c; }
                 .acu-cell-menu-item#act-history { color: #2980b9; }
                 .acu-history-dialog { width: 90%; max-width: 520px; height: auto; }
                 .acu-history-hint { margin: 0 0 12px; font-size: 12px; color: var(--acu-text-sub); line-height: 1.5; }
@@ -2699,7 +2699,7 @@ ${allTableNames.map(tName => {
                 const title = getSlotTitle(sid);
                 const tabId = `${groupId}-${sid}`;
                 const tabChanged = slotShowsChange(tables, getSlotCfg(sid)) ? ' acu-dash-tab-changed' : '';
-                header += `<div class="acu-tab-btn ${active}${tabChanged}" data-target="${tabId}">${title} ${getTabEditBtn(sid)}</div>`;
+                header += `<div class="acu-tab-btn ${active}${tabChanged}" data-target="${tabId}" data-slot="${sid}">${title} ${getTabEditBtn(sid)}</div>`;
                 body += `<div id="${tabId}" class="acu-tab-pane ${active}">${renderSlotContent(sid)}</div>`;
             });
             header += '</div>';
@@ -3179,6 +3179,18 @@ ${allTableNames.map(tName => {
         });
 
         const bindDynamicContentEvents = () => {
+            // 仪表盘格子右键菜单（编辑 / 删除）
+            $('.acu-dash-card').off('contextmenu.acu_dash').on('contextmenu.acu_dash', function(e) {
+                const $card = $(this);
+                if ($card.find('.acu-tab-btn').length === 0) return;
+                e.preventDefault();
+                e.stopPropagation();
+                let slotId = $(e.target).closest('.acu-tab-btn').data('slot');
+                if (!slotId) slotId = $card.find('.acu-tab-btn.active').data('slot');
+                if (!slotId) slotId = $card.find('.acu-tab-btn').first().data('slot');
+                if (!slotId) return;
+                showDashboardSlotMenu(e, slotId);
+            });
             $('.acu-cell').off('click').on('click', function(e) { if(isMultiSelectMode) return; e.stopPropagation(); showCellMenu(e, this); });
              $('.acu-dash-interactive').off('click').on('click', function(e) {
                 if ($(e.target).closest('.acu-dash-insert-btn').length) return;
@@ -3873,6 +3885,47 @@ ${allTableNames.map(tName => {
         });
     };
 
+    const showDashboardSlotMenu = (e, slotId) => {
+        const { $ } = getCore();
+        $('.acu-cell-menu, .acu-menu-backdrop').remove();
+        const backdrop = $('<div class="acu-menu-backdrop"></div>');
+        $('body').append(backdrop);
+        const config = getConfig();
+
+        const menu = $('<div class="acu-cell-menu acu-theme-' + config.theme + '">' +
+            '<div class="acu-cell-menu-item" id="dash-act-edit"><i class="fa-solid fa-pen"></i> 编辑</div>' +
+            '<div class="acu-cell-menu-item" id="dash-act-delete"><i class="fa-solid fa-trash"></i> 删除</div>' +
+            '</div>');
+        $('body').append(menu);
+        const mWidth = menu.outerWidth();
+        const mHeight = menu.outerHeight();
+        const winWidth = $(window).width();
+        const winHeight = $(window).height();
+
+        let left = e.clientX + 5;
+        let top = e.clientY + 5;
+        if (left + mWidth > winWidth) left = e.clientX - mWidth - 5;
+        if (top + mHeight > winHeight) top = e.clientY - mHeight - 5;
+        if (left < 0) left = 0;
+        if (top < 0) top = 0;
+        menu.css({ top: top + 'px', left: left + 'px' });
+
+        const closeAll = () => { menu.remove(); backdrop.remove(); };
+        backdrop.on('click', function (ev) { ev.stopPropagation(); closeAll(); });
+
+        menu.find('#dash-act-edit').click(() => {
+            closeAll();
+            showDashSlotSettings(slotId);
+        });
+        menu.find('#dash-act-delete').click(() => {
+            closeAll();
+            if (!confirm('确定要删除此格子吗？')) return;
+            const dashCfg = getDashConfig() || {};
+            dashCfg[slotId] = { isEmpty: true };
+            saveDashConfig(dashCfg);
+            renderInterface(false);
+        });
+    };
     const showCardEditModal = (row, headers, tableName, rowIndex, tableKey) => {
         const { $ } = getCore();
         const config = getConfig();
