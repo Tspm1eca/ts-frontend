@@ -1137,7 +1137,7 @@
                 .acu-edit-dialog { background-color: var(--acu-bg-panel) !important; width: 90%; max-width: 900px; max-height: 85vh; border-radius: 12px; display: flex; flex-direction: column; box-shadow: 0 15px 50px var(--acu-shadow); color: var(--acu-text-main) !important; border: 1px solid var(--acu-border); margin: auto !important; overflow: hidden; padding: 0; }
                 .acu-edit-title { flex: 0 0 auto; margin: 0; padding: 20px 24px; font-size: 16px; font-weight: bold; color: var(--acu-text-main); border-bottom: 1px solid var(--acu-border); }
                 .acu-settings-content { flex: 1; overflow-y: auto; padding: 20px 24px; display: block; }
-                .acu-edit-textarea { width: 100%; flex: 1; min-height: 200px; max-height: 60vh; padding: 12px; border: 1px solid var(--acu-border); background-color: var(--acu-input-bg) !important; color: var(--acu-text-main) !important; border-radius: 6px; resize: vertical; box-sizing: border-box; font-size: 14px; line-height: 1.5; font-family: monospace; overflow-y: auto; }
+                .acu-edit-textarea { width: 100%; flex: 1; min-height: 260px; max-height: none; padding: 12px; border: 1px solid var(--acu-border); background-color: var(--acu-input-bg) !important; color: var(--acu-text-main) !important; border-radius: 6px; resize: vertical; box-sizing: border-box; font-size: 14px; line-height: 1.5; font-family: monospace; overflow-y: auto; }
                 .acu-dialog-btns { flex: 0 0 auto; display: flex; justify-content: center; gap: 20px; padding: 16px 24px; border-top: 1px solid var(--acu-border); background: var(--acu-bg-panel); }
                 .acu-dialog-btn { background: none; border: none; cursor: pointer; font-size: 14px; font-weight: bold; display: flex; align-items: center; gap: 6px; color: var(--acu-text-sub); transition: color 0.2s; }
                 .acu-order-controls { display: none; width: 100%; text-align: center; background: var(--acu-table-head); padding: 5px; margin-bottom: 5px; border-radius: 4px; border: 1px dashed var(--acu-border); }
@@ -4080,7 +4080,7 @@ ${allTableNames.map(tName => {
         const config = getConfig();
         const dialog = $(`
             <div class="acu-edit-overlay">
-                <div class="acu-edit-dialog acu-theme-${config.theme}">
+                <div class="acu-edit-dialog acu-theme-${config.theme}" style="height: 82vh; max-height: 82vh;">
                     <div class="acu-edit-title">编辑单元格内容</div>
                     <textarea class="acu-edit-textarea">${content}</textarea>
                      <div class="acu-dialog-btns">
