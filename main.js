@@ -1178,6 +1178,7 @@
                 .acu-card-edit-input { width: 100%; min-height: 38px; padding: 8px; border: 1px solid var(--acu-border); background: var(--acu-input-bg); color: var(--acu-text-main); border-radius: 6px; resize: none; overflow-y: hidden; line-height: 1.4; font-family: inherit; font-size: 14px; box-sizing: border-box; }
                 .acu-card-edit-input:focus { border-color: var(--acu-highlight); outline: none; }
                 .acu-cell-menu-item#act-edit-card { color: var(--acu-highlight); }
+                .acu-cell-menu-item#dash-act-edit { color: var(--acu-highlight); }
                 .acu-cell-menu-item#act-insert { color: #2980b9; }
                 .acu-wrapper button:focus, .acu-edit-dialog button:focus, .acu-cell-menu button:focus { outline: none !important; }
 
@@ -3900,7 +3901,13 @@ ${allTableNames.map(tName => {
         const colIdx = parseInt($item.data('col'));
         if (!tname || isNaN(rowIdx) || isNaN(colIdx)) { backdrop.remove(); return; }
 
+        // 仅「卡片展示」(kv) 的单元格在右键菜单中提供「编辑」；「表格总览」(capsule) 不需要
+        const isKvCard = $item.hasClass('acu-dash-stat-row');
+        const editMenuItem = isKvCard
+            ? '<div class="acu-cell-menu-item" id="dash-act-edit"><i class="fa-solid fa-pen"></i> 编辑</div>'
+            : '';
         const menu = $('<div class="acu-cell-menu acu-theme-' + config.theme + '">' +
+            editMenuItem +
             '<div class="acu-cell-menu-item" id="dash-act-delete"><i class="fa-solid fa-trash"></i> 删除</div>' +
             '</div>');
         $('body').append(menu);
@@ -3930,6 +3937,39 @@ ${allTableNames.map(tName => {
             if (window.toastr) window.toastr.success('删除成功');
             renderInterface(true);
         });
+
+        if (isKvCard) {
+            menu.find('#dash-act-edit').click(() => {
+                closeAll();
+                const rawData = getTableData();
+                const processed = rawData ? processJsonData(rawData) : null;
+                const t = processed ? processed[tname] : null;
+                if (!t || !t.key) return;
+                const sheetId = t.key;
+                const row = rawData[sheetId] && rawData[sheetId].content[rowIdx + 1];
+                const curVal = row ? row[colIdx] : '';
+                const curStr = (curVal === undefined || curVal === null) ? '' : String(curVal);
+                showEditDialog(curStr, async (newVal) => {
+                    if (curStr === String(newVal)) return;
+                    const rd = getTableData();
+                    if (!rd || !rd[sheetId] || !rd[sheetId].content[rowIdx + 1]) return;
+                    rd[sheetId].content[rowIdx + 1][colIdx] = newVal;
+                    const saved = await saveDataToDatabase(rd, false, false, {
+                        type: 'cell_edit',
+                        tableName: tname,
+                        rowIndex: rowIdx,
+                        colIndex: colIdx,
+                        newValue: newVal
+                    });
+                    if (saved) {
+                        rememberCellValue(tname, rowIdx, colIdx, curVal, true);
+                        commitCellHistory();
+                        const $vt = $item.find('.acu-dash-stat-val').first();
+                        if ($vt.length) $vt.text(newVal);
+                    }
+                });
+            });
+        }
     };
     const showQuickViewItemMenu = (e, cellEl) => {
         const { $ } = getCore();
