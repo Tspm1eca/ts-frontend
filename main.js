@@ -9,7 +9,7 @@
 
     const SCRIPT_ID = 'acu_visualizer_ui_v20_pagination';
     // 版本号：儀表盤標題右側顯示，用於確認酒館是否已載入最新版
-    const ACU_UI_VERSION = 'v21.7';
+    const ACU_UI_VERSION = 'v21.8';
     const STORAGE_KEY_TABLE_ORDER = 'acu_table_order';
     const STORAGE_KEY_ACTION_ORDER = 'acu_action_order';
     const STORAGE_KEY_ACTIVE_TAB = 'acu_active_tab';
@@ -22,6 +22,7 @@
     const STORAGE_KEY_TABLE_STYLES = 'acu_table_styles';
     const STORAGE_KEY_CELL_HISTORY = 'acu_cell_history_v1';
     const MAX_CELL_HISTORY = 10;
+    const STORAGE_KEY_MANUAL_BUTTONS = 'acu_manual_buttons_v1';
 
     const TAB_DASHBOARD = 'acu_tab_dashboard_home';
     const STORAGE_KEY_DASH_CONFIG = 'acu_dash_config_v1';
@@ -31,6 +32,7 @@
     let isInitialized = false;
     let isSaving = false;
     let isEditingOrder = false;
+    let manualBatchWarned = false;
     let currentDiffMap = new Set();
     let lastAnnouncedDiff = '';
     let lastPaintedDataSig = '';
@@ -896,17 +898,19 @@
                 .acu-nav-container { display: flex; gap: 0; padding: 6px; background: var(--acu-bg-nav); border: 1px solid var(--acu-border); border-radius: 14px; box-shadow: 0 4px 15px var(--acu-shadow); position: relative; z-index: 20001; backdrop-filter: blur(5px); flex-direction: column; }
                 .acu-nav-tabs-area { display: grid; grid-template-columns: var(--acu-nav-cols, repeat(auto-fill, minmax(110px, 1fr))); gap: 6px; width: 100%; }
                 .acu-nav-separator { width: 100%; height: 1px; border-top: 1px dashed var(--acu-border); margin: 6px 0 6px 0; opacity: 0.6; }
-                .acu-nav-actions-area { display: flex; gap: 6px; width: 100%; justify-content: center; align-items: center; background: transparent; padding-top: 4px; }
+                .acu-nav-actions-area { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; justify-content: center; align-items: center; background: transparent; padding-top: 4px; }
                 .acu-nav-btn { width: 100%; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 5px 2px; border: 1px solid var(--acu-border); background-origin: border-box; border-radius: 8px; background: var(--acu-btn-bg); color: var(--acu-text-main); font-weight: 600; font-size: 13px; cursor: pointer; transition: all 0.2s ease; user-select: none; text-align: center; white-space: nowrap; overflow: hidden; } .acu-nav-btn i { font-size: 0.85em; }
                 .acu-nav-btn span { overflow: hidden; text-overflow: ellipsis; }
                 .acu-nav-btn:hover { background: var(--acu-btn-hover); transform: translateY(-2px); }
                 .acu-nav-btn.active { background: var(--acu-btn-active-bg); color: var(--acu-btn-active-text); box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
                 .acu-action-btn { position: relative; flex: 1 1 0; min-width: 0; height: 34px; display: flex; align-items: center; justify-content: center; gap: 6px; background: var(--acu-btn-bg); border: 1px solid var(--acu-border); border-radius: 10px; color: var(--acu-text-sub); cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: background .2s ease, color .2s ease, border-color .2s ease, box-shadow .2s ease, transform .15s ease; font-size: 12px; line-height: 1; }
                 .acu-action-btn i { font-size: 14px; transition: transform .2s ease; }
-                .acu-nav-actions-area #acu-btn-toggle, .acu-nav-actions-area #acu-btn-settings { flex: 0 0 46px; }
+                .acu-nav-actions-area #acu-btn-toggle, .acu-nav-actions-area #acu-btn-settings, .acu-nav-actions-area #acu-btn-manual-config { flex: 0 0 46px; }
                 .acu-action-btn:hover { background: var(--acu-btn-hover); color: var(--acu-highlight); border-color: var(--acu-highlight); transform: translateY(-1px); box-shadow: 0 4px 12px var(--acu-highlight-bg); }
                 .acu-action-btn:hover i { transform: scale(1.12); }
                 .acu-action-btn:active { transform: translateY(0) scale(0.97); box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+                .acu-action-btn.acu-manual-btn { flex: 0 1 auto; min-width: 38px; max-width: 140px; padding: 0 8px; gap: 4px; font-size: 11px; }
+                .acu-action-btn.acu-manual-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
                 #acu-btn-save-global:hover { background: var(--acu-btn-active-bg); color: var(--acu-btn-active-text); }
 
                 .acu-option-panel { display: grid; grid-template-columns: var(--acu-opt-cols, repeat(4, 1fr)); gap: 8px; padding: 8px; background: var(--acu-bg-nav); border: 1px solid var(--acu-border); border-radius: 12px; margin-bottom: 8px; backdrop-filter: blur(5px); width: 100%; box-sizing: border-box; z-index: 20001; contain: layout style; transition: opacity 0.15s ease-out; opacity: 1; }
@@ -1220,8 +1224,12 @@
                          margin: 0 !important;
                     }
                     .acu-nav-actions-area #acu-btn-toggle,
+                    .acu-nav-actions-area #acu-btn-manual-config,
                     .acu-nav-actions-area #acu-btn-settings {
                          flex: 0 0 44px !important;
+                    }
+                    .acu-action-btn.acu-manual-btn {
+                         flex: 0 1 auto !important;
                     }
                     .acu-option-panel {
                          grid-template-columns: 1fr !important;
@@ -2292,6 +2300,279 @@ ${allTableNames.map(tName => {
         }
     };
 
+    /* ===== 可配置「手动更新」按钮（每按钮独立：合并条数 / 最近层数 / 表格范围） ===== */
+    const uiHint = (msg, type) => {
+        const t = type || 'info';
+        try {
+            if (window.toastr && typeof window.toastr[t] === 'function') { window.toastr[t](msg); return; }
+        } catch (e) { /* ignore */ }
+        console.log('[ACU UI]', msg);
+    };
+
+    const normalizeManualButton = (b) => {
+        if (!b || typeof b !== 'object') return null;
+        const id = String(b.id || ('mb_' + Math.random().toString(36).slice(2, 9)));
+        const label = (String(b.label == null ? '' : b.label).trim() || '手动更新').slice(0, 40);
+        let icon = String(b.icon == null ? '' : b.icon).trim();
+        if (!/^fa-/.test(icon)) icon = 'fa-bolt';
+        let batchSize = parseInt(b.batchSize, 10);
+        if (!Number.isFinite(batchSize) || batchSize < 1) batchSize = 3;
+        let contextDepth = parseInt(b.contextDepth, 10);
+        if (!Number.isFinite(contextDepth) || contextDepth < 0) contextDepth = 3;
+        const useAllTables = b.useAllTables !== false;
+        const tableKeys = Array.isArray(b.tableKeys) ? b.tableKeys.map(String) : [];
+        return { id, label, icon, batchSize, contextDepth, useAllTables, tableKeys };
+    };
+
+    const getManualButtons = () => {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY_MANUAL_BUTTONS);
+            if (raw === null) {
+                return [{ id: 'default', label: '手动更新', icon: 'fa-bolt', batchSize: 3, contextDepth: 3, useAllTables: true, tableKeys: [] }];
+            }
+            const arr = JSON.parse(raw);
+            if (!Array.isArray(arr)) return [];
+            return arr.map(normalizeManualButton).filter(Boolean);
+        } catch (e) { console.error('[ACU UI] 读取手动按钮配置失败:', e); return []; }
+    };
+
+    const saveManualButtons = (arr) => {
+        try {
+            const clean = (Array.isArray(arr) ? arr : []).map(normalizeManualButton).filter(Boolean);
+            localStorage.setItem(STORAGE_KEY_MANUAL_BUTTONS, JSON.stringify(clean));
+        } catch (e) { console.error('[ACU UI] 保存手动按钮配置失败:', e); }
+    };
+
+    const getManualButtonById = (id) => getManualButtons().find(b => b.id === id) || null;
+
+    const getAvailableTableOptions = () => {
+        const out = [];
+        try {
+            const raw = getTableData(false);
+            if (raw && typeof raw === 'object') {
+                for (const sheetId in raw) {
+                    const s = raw[sheetId];
+                    if (s && s.name) out.push({ key: sheetId, name: String(s.name) });
+                }
+            }
+        } catch (e) { console.warn('[ACU UI] 获取表格列表失败:', e); }
+        return out;
+    };
+
+    // 在 Vue VNode 树中查找扩展「手动填表」面板暴露的 manualUpdate 组合式 API
+    const findManualUpdateApiInVNode = (vnode) => {
+        if (!vnode || typeof vnode !== 'object') return null;
+        try {
+            const comp = vnode.component;
+            if (comp) {
+                const su = comp.setupState;
+                if (su && su.manualUpdate && typeof su.manualUpdate.setManualBatchSize === 'function') {
+                    return su.manualUpdate;
+                }
+                if (comp.subTree) {
+                    const r = findManualUpdateApiInVNode(comp.subTree);
+                    if (r) return r;
+                }
+            }
+            const kids = vnode.children;
+            if (Array.isArray(kids)) {
+                for (let i = 0; i < kids.length; i++) {
+                    const r = findManualUpdateApiInVNode(kids[i]);
+                    if (r) return r;
+                }
+            } else if (kids && typeof kids === 'object' && kids.default) {
+                const r = findManualUpdateApiInVNode(kids.default);
+                if (r) return r;
+            }
+            if (vnode.suspense) {
+                const r = findManualUpdateApiInVNode(vnode.suspense.activeBranch) || findManualUpdateApiInVNode(vnode.suspense.subTree);
+                if (r) return r;
+            }
+        } catch (e) { /* ignore */ }
+        return null;
+    };
+
+    // 通过扩展已挂载的 Vue 应用，把「合并条数 / 最近层数」写入其内部设置（不改 index.js）
+    const applyManualFillConfig = async (cfg) => {
+        try {
+            const w = window.parent || window;
+            const doc = w.document;
+            if (!doc) return false;
+            const el = doc.getElementById('acu-app-v2');
+            if (!el || !el.__vue_app__) return false;
+            const app = el.__vue_app__;
+            const gp = app.config && app.config.globalProperties;
+            const pinia = gp && gp.$pinia;
+            if (!pinia || !pinia._s) return false;
+            const router = pinia._s.get('acu-v2-router');
+            if (!router || typeof router.setActivePage !== 'function') return false;
+            const rootShell = pinia._s.get('acu-v2-root-shell');
+            const prevPage = router.activePageId;
+            const prevOpen = rootShell ? rootShell.isOpen : undefined;
+            const prevDisplay = el.style.display;
+            try {
+                el.style.display = 'none';
+                if (rootShell && typeof rootShell.setOpen === 'function' && !rootShell.isOpen) rootShell.setOpen(true);
+                router.setActivePage('form-fill');
+                let api = null;
+                for (let i = 0; i < 40 && !api; i++) {
+                    await new Promise(r => setTimeout(r, 25));
+                    api = findManualUpdateApiInVNode(app._instance && app._instance.subTree);
+                }
+                if (!api) return false;
+                if (cfg.contextDepth !== null && cfg.contextDepth !== undefined && typeof api.setManualContextDepth === 'function') {
+                    api.setManualContextDepth(Math.max(0, Math.floor(Number(cfg.contextDepth) || 0)));
+                }
+                if (cfg.batchSize !== null && cfg.batchSize !== undefined && typeof api.setManualBatchSize === 'function') {
+                    api.setManualBatchSize(Math.max(1, Math.floor(Number(cfg.batchSize) || 1)));
+                }
+                return true;
+            } finally {
+                try { if (prevPage !== undefined && prevPage !== null) router.setActivePage(prevPage); } catch (e) { /* ignore */ }
+                try { if (rootShell && typeof rootShell.setOpen === 'function' && prevOpen === false) rootShell.setOpen(false); } catch (e) { /* ignore */ }
+                el.style.display = prevDisplay;
+            }
+        } catch (e) {
+            console.warn('[ACU UI] applyManualFillConfig 失败:', e);
+            return false;
+        }
+    };
+
+    const runManualButton = async (btnId) => {
+        const api = getCore().getDB();
+        if (!api || typeof api.manualUpdate !== 'function') {
+            uiHint('无法调用数据库更新接口', 'error');
+            return;
+        }
+        const btn = getManualButtonById(btnId) || { batchSize: 3, contextDepth: 3, useAllTables: true, tableKeys: [] };
+        try {
+            if (btn.useAllTables) {
+                if (api.clearManualSelectedTables) api.clearManualSelectedTables();
+            } else if (Array.isArray(btn.tableKeys) && btn.tableKeys.length && api.setManualSelectedTables) {
+                api.setManualSelectedTables(btn.tableKeys);
+            } else if (api.clearManualSelectedTables) {
+                api.clearManualSelectedTables();
+            }
+        } catch (e) { console.warn('[ACU UI] 设置填表范围失败:', e); }
+
+        let applied = false;
+        try { applied = await applyManualFillConfig({ batchSize: btn.batchSize, contextDepth: btn.contextDepth }); }
+        catch (e) { console.warn('[ACU UI] 应用手动填表配置失败:', e); }
+        if (!applied && !manualBatchWarned) {
+            manualBatchWarned = true;
+            uiHint('未能连接扩展的“手动填表”面板，本次改用扩展当前的全局合并条数 / 层数设置。', 'warning');
+        }
+
+        try { await api.manualUpdate({ confirm: false }); }
+        catch (e) { console.error('[ACU UI] 手动更新失败:', e); uiHint('手动更新失败', 'error'); }
+    };
+
+    const showManualButtonsManager = () => {
+        const { $ } = getCore();
+        $('.acu-manual-mgr-overlay').remove();
+        const config = getConfig();
+        const options = getAvailableTableOptions();
+        let drafts = getManualButtons().map(b => ({ ...b, tableKeys: Array.isArray(b.tableKeys) ? [...b.tableKeys] : [] }));
+        const inputStyle = 'padding:5px 8px;border:1px solid var(--acu-border);border-radius:7px;background:var(--acu-input-bg);color:var(--acu-text-main);font-size:12px;box-sizing:border-box;width:100%;';
+
+        const cardHtml = (b) => `
+            <div class="acu-manual-card" style="border:1px solid var(--acu-border);border-radius:10px;padding:12px;margin-bottom:12px;background:var(--acu-bg-panel);">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                    <i class="fa-solid ${b.icon || 'fa-bolt'} acu-manual-preview" style="font-size:16px;width:20px;text-align:center;color:var(--acu-highlight);"></i>
+                    <input class="acu-manual-label" value="${escapeHtml(b.label)}" placeholder="按钮名称" style="flex:1;${inputStyle}">
+                    <button type="button" class="acu-manual-del" title="删除此按钮" style="background:none;border:none;cursor:pointer;color:#e74c3c;font-size:14px;padding:4px;"><i class="fa-solid fa-trash"></i></button>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
+                    <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--acu-text-sub);">图标（FontAwesome）<input class="acu-manual-icon" value="${escapeHtml(b.icon)}" placeholder="fa-bolt" style="${inputStyle}"></label>
+                    <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--acu-text-sub);">每 N 条 AI 回复合并为一次填表<input type="number" min="1" step="1" class="acu-manual-batch" value="${b.batchSize}" style="${inputStyle}"></label>
+                    <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--acu-text-sub);">手动处理最近 N 层（0 = 全部）<input type="number" min="0" step="1" class="acu-manual-depth" value="${b.contextDepth}" style="${inputStyle}"></label>
+                </div>
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--acu-text-main);"><input type="checkbox" class="acu-manual-all" ${b.useAllTables ? 'checked' : ''}> 使用全部表格</label>
+                <div class="acu-manual-tables" style="display:${b.useAllTables ? 'none' : 'grid'};grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:4px 10px;max-height:150px;overflow:auto;margin-top:8px;padding:8px;border:1px dashed var(--acu-border);border-radius:8px;">
+                    ${options.length ? options.map(o => `<label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--acu-text-main);min-width:0;"><input type="checkbox" class="acu-manual-table-cb" value="${escapeHtml(o.key)}" ${b.tableKeys.includes(o.key) ? 'checked' : ''}> <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(o.name)}</span></label>`).join('') : '<span style="font-size:12px;color:var(--acu-text-sub);">暂无可用表格</span>'}
+                </div>
+            </div>`;
+
+        const dialog = $(`
+            <div class="acu-edit-overlay acu-manual-mgr-overlay">
+                <div class="acu-edit-dialog acu-theme-${config.theme}" style="max-width:780px;height:86vh;max-height:86vh;">
+                    <div class="acu-edit-title" style="display:flex;justify-content:space-between;align-items:center;">
+                        <span><i class="fa-solid fa-bolt"></i> 管理手动更新按钮</span>
+                        <button type="button" id="mgr-close" style="background:none;border:none;cursor:pointer;color:var(--acu-text-sub);font-size:13px;">完成</button>
+                    </div>
+                    <div class="acu-settings-content" style="flex:1;overflow-y:auto;padding:16px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;">
+                            <button type="button" class="acu-dialog-btn" id="mgr-add" style="color:var(--acu-highlight);font-weight:bold;"><i class="fa-solid fa-plus"></i> 新增按钮</button>
+                            <span style="font-size:11px;color:var(--acu-text-sub);text-align:right;line-height:1.4;">每个按钮点击时，按其各自的合并条数 / 最近层数 / 表格范围执行一次手动填表。</span>
+                        </div>
+                        <div id="mgr-list"></div>
+                    </div>
+                    <div class="acu-dialog-btns">
+                        <button type="button" class="acu-dialog-btn" id="mgr-cancel">取消</button>
+                        <button type="button" class="acu-dialog-btn acu-btn-confirm" id="mgr-save" style="color:var(--acu-highlight)"><i class="fa-solid fa-check"></i> 保存</button>
+                    </div>
+                </div>
+            </div>
+        `);
+        const $list = dialog.find('#mgr-list');
+        const renderList = () => {
+            $list.html(drafts.length
+                ? drafts.map(cardHtml).join('')
+                : '<div style="text-align:center;color:var(--acu-text-sub);font-size:13px;padding:30px 0;">还没有按钮，点击「新增按钮」创建。</div>');
+        };
+        renderList();
+        $('body').append(dialog);
+
+        const readCard = ($card, idx) => {
+            const base = drafts[idx] || {};
+            const label = String($card.find('.acu-manual-label').val() == null ? '' : $card.find('.acu-manual-label').val()).trim() || '手动更新';
+            let icon = String($card.find('.acu-manual-icon').val() == null ? '' : $card.find('.acu-manual-icon').val()).trim();
+            if (!/^fa-/.test(icon)) icon = 'fa-bolt';
+            let batchSize = parseInt($card.find('.acu-manual-batch').val(), 10);
+            if (!Number.isFinite(batchSize) || batchSize < 1) batchSize = 3;
+            let contextDepth = parseInt($card.find('.acu-manual-depth').val(), 10);
+            if (!Number.isFinite(contextDepth) || contextDepth < 0) contextDepth = 3;
+            const useAllTables = $card.find('.acu-manual-all').is(':checked');
+            const tableKeys = [];
+            $card.find('.acu-manual-table-cb:checked').each(function () { tableKeys.push(String($(this).val())); });
+            return { id: base.id || ('mb_' + Math.random().toString(36).slice(2, 9)), label: label.slice(0, 40), icon, batchSize, contextDepth, useAllTables, tableKeys };
+        };
+        const syncDraftsFromDom = () => {
+            drafts = $list.find('.acu-manual-card').map(function (i) { return readCard($(this), i); }).get();
+        };
+
+        dialog.on('input change', '.acu-manual-icon', function () {
+            const val = String($(this).val() || '').trim();
+            $(this).closest('.acu-manual-card').find('.acu-manual-preview').attr('class', 'fa-solid ' + (/^fa-/.test(val) ? val : 'fa-bolt') + ' acu-manual-preview');
+        });
+        dialog.on('change', '.acu-manual-all', function () {
+            $(this).closest('.acu-manual-card').find('.acu-manual-tables').css('display', this.checked ? 'none' : 'grid');
+        });
+        dialog.on('click', '.acu-manual-del', function (e) {
+            e.preventDefault(); e.stopPropagation();
+            const idx = parseInt($(this).closest('.acu-manual-card').index(), 10);
+            syncDraftsFromDom();
+            if (idx >= 0) drafts.splice(idx, 1);
+            renderList();
+        });
+        dialog.on('click', '#mgr-add', function (e) {
+            e.preventDefault(); e.stopPropagation();
+            syncDraftsFromDom();
+            drafts.push({ id: 'mb_' + Math.random().toString(36).slice(2, 9), label: '手动更新', icon: 'fa-bolt', batchSize: 3, contextDepth: 3, useAllTables: true, tableKeys: [] });
+            renderList();
+        });
+        dialog.on('click', '#mgr-close, #mgr-cancel', function (e) { e.preventDefault(); dialog.remove(); });
+        dialog.on('click', '#mgr-save', function (e) {
+            e.preventDefault();
+            syncDraftsFromDom();
+            saveManualButtons(drafts);
+            dialog.remove();
+            uiHint('已保存手动更新按钮', 'success');
+            renderInterface(false);
+        });
+        dialog.on('click', function (e) { if ($(e.target).hasClass('acu-edit-overlay')) dialog.remove(); });
+    };
+
     const renderInterface = (forceRefresh = false) => {
         const { $ } = getCore();
         if (!$) return;
@@ -2365,17 +2646,40 @@ ${allTableNames.map(tName => {
 
             const actionBtns = {
                 'acu-btn-open-db': `<button class="acu-action-btn" id="acu-btn-open-db" title="打开数据库首页"><i class="fa-solid fa-database"></i></button>`,
-                'acu-btn-open-visualizer': `<button class="acu-action-btn" id="acu-btn-open-visualizer" title="打开表格编辑器"><i class="fa-solid fa-table-cells"></i></button>`,
-                'acu-btn-settings': `<button class="acu-action-btn" id="acu-btn-settings" title="全能设置"><i class="fa-solid fa-cog"></i></button>`,
-                'acu-btn-toggle': `<button class="acu-action-btn" id="acu-btn-toggle" title="${isCollapsed ? '展开' : '收起'}"><i class="fa-solid ${isCollapsed ? 'fa-chevron-up' : 'fa-chevron-down'}"></i></button>`
+                'acu-btn-open-visualizer': `<button class="acu-action-btn" id="acu-btn-open-visualizer" title="打开表格编辑器"><i class="fa-solid fa-table-cells"></i></button>`
             };
+            const manualBtns = getManualButtons();
+            manualBtns.forEach(cfg => {
+                const btnId = 'acu-manual-btn-' + cfg.id;
+                actionBtns[btnId] = `<button class="acu-action-btn acu-manual-btn" id="${btnId}" data-manual-id="${escapeHtml(cfg.id)}" title="${escapeHtml(cfg.label)}（点击手动更新）"><i class="fa-solid ${cfg.icon || 'fa-bolt'}"></i><span>${escapeHtml(cfg.label)}</span></button>`;
+            });
+            actionBtns['acu-btn-manual-config'] = `<button class="acu-action-btn" id="acu-btn-manual-config" title="管理手动更新按钮"><i class="fa-solid fa-sliders"></i></button>`;
+            actionBtns['acu-btn-settings'] = `<button class="acu-action-btn" id="acu-btn-settings" title="全能设置"><i class="fa-solid fa-cog"></i></button>`;
+            actionBtns['acu-btn-toggle'] = `<button class="acu-action-btn" id="acu-btn-toggle" title="${isCollapsed ? '展开' : '收起'}"><i class="fa-solid ${isCollapsed ? 'fa-chevron-up' : 'fa-chevron-down'}"></i></button>`;
 
-            const savedActionOrder = getSavedActionOrder() || Object.keys(actionBtns);
-            let finalActionOrder = savedActionOrder.filter(k => actionBtns[k]);
-            Object.keys(actionBtns).forEach(k => { if (!finalActionOrder.includes(k)) finalActionOrder.push(k); });
+            const baseActionOrder = ['acu-btn-open-db', 'acu-btn-open-visualizer']
+                .concat(manualBtns.map(c => 'acu-manual-btn-' + c.id))
+                .concat(['acu-btn-manual-config', 'acu-btn-settings', 'acu-btn-toggle']);
+            const savedActionOrder = getSavedActionOrder();
+            let finalActionOrder;
+            if (Array.isArray(savedActionOrder) && savedActionOrder.length) {
+                finalActionOrder = savedActionOrder.filter(k => actionBtns[k]);
+                baseActionOrder.forEach(k => {
+                    if (finalActionOrder.includes(k)) return;
+                    const basePos = baseActionOrder.indexOf(k);
+                    let insertAt = finalActionOrder.length;
+                    for (let j = 0; j < finalActionOrder.length; j++) {
+                        const bp = baseActionOrder.indexOf(finalActionOrder[j]);
+                        if (bp !== -1 && bp > basePos) { insertAt = j; break; }
+                    }
+                    finalActionOrder.splice(insertAt, 0, k);
+                });
+            } else {
+                finalActionOrder = baseActionOrder;
+            }
 
             let navActionsHtml = '';
-            finalActionOrder.forEach(k => { navActionsHtml += actionBtns[k]; });
+            finalActionOrder.forEach(k => { if (actionBtns[k]) navActionsHtml += actionBtns[k]; });
 
             const orderControlsHtml = isEditingOrder
                 ? `<div class="acu-order-controls visible" id="acu-order-hint" style="display:flex;justify-content:space-between;align-items:center"><span style="color:var(--acu-title-color);font-weight:bold;">点击表格调整位置</span><div><button id="acu-btn-cancel-mode" style="margin-right:5px;cursor:pointer;background:var(--acu-btn-bg);border:1px solid var(--acu-border);padding:3px 8px;border-radius:4px;color:var(--acu-title-color)">取消</button><button id="acu-btn-save-mode" style="cursor:pointer;background:var(--acu-btn-active-bg);border:none;padding:3px 8px;border-radius:4px;color:var(--acu-btn-active-text);font-weight:bold">保存</button></div></div>`
@@ -3511,6 +3815,18 @@ ${allTableNames.map(tName => {
             } else if (window.toastr) {
                 window.toastr.error('无法调用表格编辑器接口');
             }
+        });
+        $('.acu-manual-btn').off('click').on('click', async function(e) {
+            e.preventDefault(); e.stopPropagation();
+            if (isEditingOrder) return;
+            const btnId = $(this).data('manual-id');
+            await runManualButton(btnId);
+        });
+        $('#acu-btn-manual-config').off('click').on('click', function(e) {
+            e.preventDefault(); e.stopPropagation();
+            if (isEditingOrder) return;
+            try { showManualButtonsManager(); }
+            catch (err) { console.error('打开手动按钮管理失败:', err); if (window.toastr) window.toastr.error('打开手动按钮管理失败'); }
         });
         $('#send_but').off('click.acu_opt_hide').on('click.acu_opt_hide', function() {
              hideOptionsUntilUpdate = true;
