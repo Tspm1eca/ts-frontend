@@ -9,7 +9,7 @@
 
     const SCRIPT_ID = 'acu_visualizer_ui_v20_pagination';
     // 版本号：儀表盤標題右側顯示，用於確認酒館是否已載入最新版
-    const ACU_UI_VERSION = 'v22.8';
+    const ACU_UI_VERSION = 'v22.9';
     const STORAGE_KEY_TABLE_ORDER = 'acu_table_order';
     const STORAGE_KEY_ACTION_ORDER = 'acu_action_order';
     const STORAGE_KEY_ACTIVE_TAB = 'acu_active_tab';
@@ -2313,10 +2313,26 @@ ${allTableNames.map(tName => {
     /* ===== 可配置「手动更新」按钮（每按钮独立：合并条数 / 最近层数 / 表格范围） ===== */
     const uiHint = (msg, type) => {
         const t = type || 'info';
+        const tryToastr = (w) => {
+            try { if (w && w.toastr && typeof w.toastr[t] === 'function') { w.toastr[t](msg); return true; } } catch (e) { /* ignore */ }
+            return false;
+        };
+        let wins = [];
+        try { if (typeof resolveAcuHostWindows === 'function') wins = resolveAcuHostWindows() || []; } catch (e) { /* ignore */ }
+        if (!wins.length) { try { wins = [window.parent || window]; } catch (e) { wins = [window]; } }
+        if (wins.indexOf(window) === -1) wins.push(window);
+        // 由最外層（實際顯示 UI 的宿主文件）往內找，確保提示真的看得見
+        for (let i = wins.length - 1; i >= 0; i--) { if (tryToastr(wins[i])) return; }
+        // 最後手段：在最外層文件插入短暫橫幅
         try {
-            if (window.toastr && typeof window.toastr[t] === 'function') { window.toastr[t](msg); return; }
-        } catch (e) { /* ignore */ }
-        console.log('[ACU UI]', msg);
+            const hostWin = wins[wins.length - 1] || window;
+            const doc = hostWin.document;
+            const bar = doc.createElement('div');
+            bar.textContent = msg;
+            bar.style.cssText = 'position:fixed;z-index:2147483647;left:50%;top:12px;transform:translateX(-50%);max-width:80vw;padding:8px 14px;border-radius:8px;font-size:12px;line-height:1.4;color:#fff;box-shadow:0 4px 16px rgba(0,0,0,.35);background:' + (t === 'error' ? '#c0392b' : (t === 'warning' ? '#b9770e' : '#2c3e50')) + ';';
+            doc.body.appendChild(bar);
+            setTimeout(() => { try { bar.remove(); } catch (e) { /* ignore */ } }, 4500);
+        } catch (e) { console.log('[ACU UI]', msg); }
     };
 
     const normalizeManualButton = (b) => {
