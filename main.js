@@ -9,7 +9,7 @@
 
     const SCRIPT_ID = 'acu_visualizer_ui_v20_pagination';
     // 版本号：儀表盤標題右側顯示，用於確認酒館是否已載入最新版
-    const ACU_UI_VERSION = 'v22.7';
+    const ACU_UI_VERSION = 'v22.8';
     const STORAGE_KEY_TABLE_ORDER = 'acu_table_order';
     const STORAGE_KEY_ACTION_ORDER = 'acu_action_order';
     const STORAGE_KEY_ACTIVE_TAB = 'acu_active_tab';
@@ -32,7 +32,6 @@
     let isInitialized = false;
     let isSaving = false;
     let isEditingOrder = false;
-    let manualBatchWarned = false;
     let currentDiffMap = new Set();
     let lastAnnouncedDiff = '';
     let lastPaintedDataSig = '';
@@ -2567,16 +2566,24 @@ ${allTableNames.map(tName => {
                     api = findManualUpdateApiInVNode(getAppRootVNode(app));
                 }
                 if (!api) return { ok: false, code: 'no-api' };
-                let done = 0;
-                if (cfg.contextDepth !== null && cfg.contextDepth !== undefined && typeof api.setManualContextDepth === 'function') {
-                    api.setManualContextDepth(Math.max(0, Math.floor(Number(cfg.contextDepth) || 0)));
-                    done++;
+                let okDepth = (cfg.contextDepth === null || cfg.contextDepth === undefined);
+                let okBatch = (cfg.batchSize === null || cfg.batchSize === undefined);
+                const miss = [];
+                if (!okDepth) {
+                    if (typeof api.setManualContextDepth === 'function') {
+                        api.setManualContextDepth(Math.max(0, Math.floor(Number(cfg.contextDepth) || 0)));
+                        okDepth = true;
+                    } else { miss.push('setManualContextDepth'); }
                 }
-                if (cfg.batchSize !== null && cfg.batchSize !== undefined && typeof api.setManualBatchSize === 'function') {
-                    api.setManualBatchSize(Math.max(1, Math.floor(Number(cfg.batchSize) || 1)));
-                    done++;
+                if (!okBatch) {
+                    if (typeof api.setManualBatchSize === 'function') {
+                        api.setManualBatchSize(Math.max(1, Math.floor(Number(cfg.batchSize) || 1)));
+                        okBatch = true;
+                    } else { miss.push('setManualBatchSize'); }
                 }
-                return done > 0 ? { ok: true } : { ok: false, code: 'no-setter' };
+                // 兩個都必須成功，缺一即視為失敗（寧可停止填表，也不能用錯樓層/合併設定）
+                if (!okDepth || !okBatch) return { ok: false, code: 'no-setter' + (miss.length ? ':' + miss.join('/') : '') };
+                return { ok: true };
             } finally {
                 try { if (router && typeof router.setActivePage === 'function' && prevPage !== undefined && prevPage !== null) router.setActivePage(prevPage); } catch (e) { /* ignore */ }
                 try { if (rootShell && typeof rootShell.setOpen === 'function' && prevOpen === false) rootShell.setOpen(false); } catch (e) { /* ignore */ }
@@ -2770,10 +2777,11 @@ ${allTableNames.map(tName => {
         try { applyRes = await applyManualFillConfig({ batchSize: btn.batchSize, contextDepth: btn.contextDepth }); }
         catch (e) { console.warn('[ACU UI] 应用手动填表配置失败:', e); }
         const applied = !!(applyRes && applyRes.ok);
-        if (!applied && !manualBatchWarned) {
-            manualBatchWarned = true;
+        if (!applied) {
+            // 絕不降級使用全局設定：寧可不填，也不能用錯誤的樓層內容寫入表格
             try { console.info('[ACU UI] 手动填表 hook 连接诊断：', window.__acuManualDebug ? window.__acuManualDebug() : 'n/a'); } catch (e) { /* ignore */ }
-            uiHint('未能连接扩展的“手动填表”面板，本次改用扩展当前的全局合并条数 / 层数设置。（诊断码：' + ((applyRes && applyRes.code) || 'unknown') + '）', 'warning');
+            uiHint('無法正確設定「每 N 條 AI 回覆合併為一次填表」/「手動處理最近 N 層」，已停止本次填表，以免用錯誤樓層內容寫入表格。（診斷碼：' + ((applyRes && applyRes.code) || 'unknown') + '）', 'error');
+            return;
         }
 
         try { await api.manualUpdate({ confirm: false }); }
