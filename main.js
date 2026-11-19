@@ -9,7 +9,7 @@
 
     const SCRIPT_ID = 'acu_visualizer_ui_v20_pagination';
     // 版本号：儀表盤標題右側顯示，用於確認酒館是否已載入最新版
-    const ACU_UI_VERSION = 'v22.3';
+    const ACU_UI_VERSION = 'v22.4';
     const STORAGE_KEY_TABLE_ORDER = 'acu_table_order';
     const STORAGE_KEY_ACTION_ORDER = 'acu_action_order';
     const STORAGE_KEY_ACTIVE_TAB = 'acu_active_tab';
@@ -1163,7 +1163,7 @@
                 .acu-nav-container.editing-order .acu-nav-btn, .acu-nav-container.editing-order .acu-action-btn { border: 1px dashed #f0ad4e; cursor: grab; opacity: 0.8; }
                 .acu-divider { width: 1px; height: 18px; background: var(--acu-border); margin: 0 6px; }
                 .acu-nav-container.collapsed > *:not(.acu-nav-actions-area) { display: none !important; }
-                .acu-nav-container.collapsed { width: 100%; justify-content: center; cursor: pointer; padding: 8px 6px; flex-direction: column; gap: 0; height: auto; transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1); }
+                .acu-nav-container.collapsed { width: 100%; justify-content: center; padding: 8px 6px; flex-direction: column; gap: 0; height: auto; transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1); }
                 .acu-nav-container.collapsed.acu-collapse-pill { width: auto !important; border-radius: 50px; padding: 8px 12px; margin-top: 5px; box-shadow: 0 5px 15px var(--acu-shadow); background: var(--acu-bg-nav); border: 1px solid var(--acu-border); }
                 .acu-nav-container.collapsed.acu-collapse-pill.acu-pill-center { align-self: center; }
                 .acu-nav-container.collapsed.acu-collapse-pill.acu-pill-left { align-self: flex-start; margin-left: 15px; }
@@ -4041,7 +4041,7 @@ ${allTableNames.map(tName => {
 
         const toggleUI = () => { isCollapsed = !isCollapsed; localStorage.setItem(STORAGE_KEY_UI_COLLAPSE, isCollapsed); renderInterface(false); };
         $('#acu-btn-toggle').off('click').on('click', (e) => { e.stopPropagation(); if (isEditingOrder) return; toggleUI(); });
-        if (isCollapsed) { $('.acu-nav-container').off('click').on('click', (e) => { e.stopPropagation(); toggleUI(); }); }
+        // 收起状态下也仅由右上角的展开/收起按钮切换，点击导航条空白处不触发
 
         $('#acu-btn-settings').off('click').on('click', (e) => {
             e.stopPropagation();
