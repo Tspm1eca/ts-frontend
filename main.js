@@ -2609,7 +2609,7 @@ ${allTableNames.map(tName => {
 
         const finish = (v) => {
             try { pop.remove(); } catch (e) { /* ignore */ }
-            try { $(adoc).off('click.acuMconfOutside'); } catch (e) { /* ignore */ }
+            try { adoc.removeEventListener('click', onOutside, true); } catch (e) { /* ignore */ }
             try { awin.removeEventListener('resize', reposition, true); } catch (e) { /* ignore */ }
             try { awin.removeEventListener('scroll', onScrollClose, true); } catch (e) { /* ignore */ }
             try { adoc.removeEventListener('keydown', onKey, true); } catch (e) { /* ignore */ }
@@ -2623,11 +2623,11 @@ ${allTableNames.map(tName => {
         pop.on('click', '#mconf-ok', (e) => { e.preventDefault(); e.stopPropagation(); finish(true); });
         pop.on('click', '#mconf-cancel', (e) => { e.preventDefault(); e.stopPropagation(); finish(false); });
         pop.on('click', (e) => { e.stopPropagation(); });
-        setTimeout(() => {
-            $(adoc).on('click.acuMconfOutside', (e) => {
-                if (!$(e.target).closest('.acu-manual-confirm-pop').length) finish(false);
-            });
-        }, 0);
+        const onOutside = (e) => {
+            try { if (e && e.target && e.target.closest && e.target.closest('.acu-manual-confirm-pop')) return; } catch (err) { /* ignore */ }
+            finish(false);
+        };
+        setTimeout(() => { try { adoc.addEventListener('click', onOutside, true); } catch (e) { /* ignore */ } }, 0);
     });
 
     const runManualButton = async (btnId, anchorEl) => {
@@ -2747,6 +2747,14 @@ ${allTableNames.map(tName => {
                 tableKeys.push(k);
                 const o = options.find(x => x.key === k);
                 tableNames.push(o ? o.name : k);
+            });
+            // 保留当前聊天中不存在、但按钮原本已选择的表格，避免保存时被清空
+            const optKeys = new Set(options.map(o => o.key));
+            (Array.isArray(base.tableKeys) ? base.tableKeys : []).forEach((k, i) => {
+                if (!optKeys.has(k) && tableKeys.indexOf(k) === -1) {
+                    tableKeys.push(k);
+                    tableNames.push((Array.isArray(base.tableNames) && base.tableNames[i]) || k);
+                }
             });
             return { id: base.id || ('mb_' + Math.random().toString(36).slice(2, 9)), label: label.slice(0, 40), icon, batchSize, contextDepth, useAllTables, tableKeys, tableNames };
         };
