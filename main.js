@@ -9,7 +9,7 @@
 
     const SCRIPT_ID = 'acu_visualizer_ui_v20_pagination';
     // 版本号：儀表盤標題右側顯示，用於確認酒館是否已載入最新版
-    const ACU_UI_VERSION = 'v22.4';
+    const ACU_UI_VERSION = 'v22.5';
     const STORAGE_KEY_TABLE_ORDER = 'acu_table_order';
     const STORAGE_KEY_ACTION_ORDER = 'acu_action_order';
     const STORAGE_KEY_ACTIVE_TAB = 'acu_active_tab';
@@ -920,6 +920,7 @@
                 .acu-manual-confirm-pop .acu-mconf-btn { padding: 4px 12px; border-radius: 7px; border: 1px solid var(--acu-border, #444); background: var(--acu-btn-bg, #2a2a3a); color: var(--acu-text-main, #eee); cursor: pointer; font-size: 12px; }
                 .acu-manual-confirm-pop .acu-mconf-btn:hover { border-color: var(--acu-highlight, #d35400); color: var(--acu-highlight, #d35400); }
                 .acu-manual-confirm-pop .acu-mconf-primary { background: var(--acu-highlight, #d35400); border-color: var(--acu-highlight, #d35400); color: #fff; font-weight: 700; }
+                .acu-manual-confirm-pop .acu-mconf-primary:hover { color: #fff !important; background: var(--acu-highlight, #d35400); border-color: var(--acu-highlight, #d35400); filter: brightness(1.12); }
                 @keyframes acuMconfIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
                 #acu-btn-save-global:hover { background: var(--acu-btn-active-bg); color: var(--acu-btn-active-text); }
 
@@ -2358,19 +2359,28 @@ ${allTableNames.map(tName => {
 
     const getAvailableTableOptions = () => {
         const out = [];
-        try {
-            let raw = null;
-            try {
-                const api = getCore().getDB();
-                raw = api && api.exportTableAsJson ? api.exportTableAsJson() : null;
-            } catch (e) { raw = null; }
-            if (!raw || !Object.keys(raw).length) raw = getTableData(false);
-            if (raw && typeof raw === 'object') {
-                for (const sheetId in raw) {
-                    const s = raw[sheetId];
-                    if (s && s.name) out.push({ key: sheetId, name: String(s.name) });
-                }
+        const seen = new Set();
+        const collect = (raw) => {
+            if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch (e) { return; } }
+            if (!raw || typeof raw !== 'object') return;
+            for (const sheetId in raw) {
+                if (!/^sheet_/i.test(String(sheetId))) continue;
+                const s = raw[sheetId];
+                if (!s || !s.name) continue;
+                if (seen.has(sheetId)) continue;
+                seen.add(sheetId);
+                out.push({ key: sheetId, name: String(s.name) });
             }
+        };
+        try {
+            const api = getCore().getDB();
+            if (api) {
+                // 优先当前运行时数据；读不到时回退到表格模板（模板含每个 sheet 的名称，不依赖当前聊天是否已加载）
+                try { collect(api.exportTableAsJson ? api.exportTableAsJson() : null); } catch (e) { /* ignore */ }
+                try { collect(api.getTableTemplate ? api.getTableTemplate({ scope: 'chat' }) : null); } catch (e) { /* ignore */ }
+                try { collect(api.getTableTemplate ? api.getTableTemplate({ scope: 'global' }) : null); } catch (e) { /* ignore */ }
+            }
+            try { collect(getTableData(false)); } catch (e) { /* ignore */ }
         } catch (e) { console.warn('[ACU UI] 获取表格列表失败:', e); }
         return out;
     };
