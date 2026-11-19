@@ -9,7 +9,7 @@
 
     const SCRIPT_ID = 'acu_visualizer_ui_v20_pagination';
     // 版本号：儀表盤標題右側顯示，用於確認酒館是否已載入最新版
-    const ACU_UI_VERSION = 'v22.0';
+    const ACU_UI_VERSION = 'v22.2';
     const STORAGE_KEY_TABLE_ORDER = 'acu_table_order';
     const STORAGE_KEY_ACTION_ORDER = 'acu_action_order';
     const STORAGE_KEY_ACTIVE_TAB = 'acu_active_tab';
@@ -911,6 +911,16 @@
                 .acu-action-btn:active { transform: translateY(0) scale(0.97); box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
                 .acu-action-btn.acu-manual-btn { flex: 0 1 auto; min-width: 38px; max-width: 140px; padding: 0 8px; gap: 4px; font-size: 11px; }
                 .acu-action-btn.acu-manual-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+                .acu-manual-confirm-pop { position: fixed !important; z-index: 2147483000; width: 300px; max-width: calc(100vw - 16px); box-sizing: border-box; background: var(--acu-bg-panel, #1e1e2e); border: 1px solid var(--acu-border, #444); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.45); padding: 11px 13px 9px; font-size: 12.5px; line-height: 1.65; color: var(--acu-text-main, #eee); animation: acuMconfIn .12s ease-out; }
+                .acu-manual-confirm-pop .acu-mconf-arrow { position: absolute; width: 10px; height: 10px; background: var(--acu-bg-panel, #1e1e2e); border-left: 1px solid var(--acu-border, #444); border-top: 1px solid var(--acu-border, #444); }
+                .acu-manual-confirm-pop .acu-mconf-title { font-weight: 700; font-size: 13px; color: var(--acu-title-color, inherit); margin-bottom: 5px; display: flex; align-items: center; gap: 6px; }
+                .acu-manual-confirm-pop .acu-mconf-meta { color: var(--acu-text-sub, #aaa); font-size: 11.5px; }
+                .acu-manual-confirm-pop .acu-mconf-tables { margin-top: 2px; word-break: break-word; }
+                .acu-manual-confirm-pop .acu-mconf-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 9px; }
+                .acu-manual-confirm-pop .acu-mconf-btn { padding: 4px 12px; border-radius: 7px; border: 1px solid var(--acu-border, #444); background: var(--acu-btn-bg, #2a2a3a); color: var(--acu-text-main, #eee); cursor: pointer; font-size: 12px; }
+                .acu-manual-confirm-pop .acu-mconf-btn:hover { border-color: var(--acu-highlight, #d35400); color: var(--acu-highlight, #d35400); }
+                .acu-manual-confirm-pop .acu-mconf-primary { background: var(--acu-highlight, #d35400); border-color: var(--acu-highlight, #d35400); color: #fff; font-weight: 700; }
+                @keyframes acuMconfIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
                 #acu-btn-save-global:hover { background: var(--acu-btn-active-bg); color: var(--acu-btn-active-text); }
 
                 .acu-option-panel { display: grid; grid-template-columns: var(--acu-opt-cols, repeat(4, 1fr)); gap: 8px; padding: 8px; background: var(--acu-bg-nav); border: 1px solid var(--acu-border); border-radius: 12px; margin-bottom: 8px; backdrop-filter: blur(5px); width: 100%; box-sizing: border-box; z-index: 20001; contain: layout style; transition: opacity 0.15s ease-out; opacity: 1; }
@@ -2505,42 +2515,96 @@ ${allTableNames.map(tName => {
         };
     } catch (e) { /* ignore */ }
 
-    // 执行前的二次确认，避免误触
-    const showManualConfirm = (btn) => new Promise((resolve) => {
+    // 执行前的二次确认：以「气泡」形式显示在触发按钮正上方，避免屏幕居中打扰
+    const showManualConfirm = (btn, anchorEl) => new Promise((resolve) => {
         const { $ } = getCore();
         if (!$) { try { resolve(window.confirm('确定执行「' + (btn.label || '手动更新') + '」吗？')); } catch (e) { resolve(true); } return; }
-        $('.acu-manual-confirm-overlay').remove();
+        $('.acu-manual-confirm-pop').remove();
         const cfg = getConfig();
-        const scope = btn.useAllTables ? '全部表格' : (Array.isArray(btn.tableKeys) && btn.tableKeys.length ? ('已选 ' + btn.tableKeys.length + ' 张表') : '未选择表格');
-        const dlg = $(`
-            <div class="acu-edit-overlay acu-manual-confirm-overlay">
-                <div class="acu-edit-dialog acu-theme-${cfg.theme}" style="max-width:420px;height:auto;max-height:70vh;">
-                    <div class="acu-edit-title"><i class="fa-solid fa-circle-question"></i> 再次确定</div>
-                    <div class="acu-settings-content" style="padding:18px;font-size:13px;color:var(--acu-text-main);line-height:1.8;">
-                        确定要执行「<b>${escapeHtml(btn.label || '手动更新')}</b>」吗？<br>
-                        <span style="color:var(--acu-text-sub);font-size:12px;">合并条数：${btn.batchSize} ｜ 最近层数：${btn.contextDepth} ｜ 表格范围：${escapeHtml(scope)}</span>
-                    </div>
-                    <div class="acu-dialog-btns">
-                        <button type="button" class="acu-dialog-btn" id="mconf-cancel">取消</button>
-                        <button type="button" class="acu-dialog-btn" id="mconf-ok" style="color:var(--acu-highlight);font-weight:bold;">确定执行</button>
-                    </div>
+        const opts = getAvailableTableOptions();
+        const nameByKey = {};
+        opts.forEach(o => { nameByKey[o.key] = o.name; });
+        let tableNames;
+        if (btn.useAllTables) {
+            tableNames = opts.map(o => o.name);
+        } else if (Array.isArray(btn.tableKeys) && btn.tableKeys.length) {
+            tableNames = btn.tableKeys.map(k => nameByKey[k] || k);
+        } else {
+            tableNames = [];
+        }
+        const tableText = tableNames.length ? tableNames.join('、') : (btn.useAllTables ? '全部表格' : '未选择表格（不会填写任何表）');
+        const pop = $(`
+            <div class="acu-manual-confirm-pop acu-theme-${cfg.theme}">
+                <div class="acu-mconf-arrow"></div>
+                <div class="acu-mconf-title"><i class="fa-solid fa-circle-question"></i> 再次确定</div>
+                <div class="acu-mconf-body">
+                    <div>确定要执行「<b>${escapeHtml(btn.label || '手动更新')}</b>」吗？</div>
+                    <div class="acu-mconf-meta">合并条数：${btn.batchSize} ｜ 最近层数：${btn.contextDepth}</div>
+                    <div class="acu-mconf-tables">将填写的表格：<b>${escapeHtml(tableText)}</b></div>
+                </div>
+                <div class="acu-mconf-btns">
+                    <button type="button" class="acu-mconf-btn" id="mconf-cancel">取消</button>
+                    <button type="button" class="acu-mconf-btn acu-mconf-primary" id="mconf-ok">确定执行</button>
                 </div>
             </div>`);
-        $('body').append(dlg);
-        const finish = (v) => { try { dlg.remove(); } catch (e) { /* ignore */ } resolve(v); };
-        dlg.on('click', '#mconf-ok', (e) => { e.preventDefault(); e.stopPropagation(); finish(true); });
-        dlg.on('click', '#mconf-cancel', (e) => { e.preventDefault(); e.stopPropagation(); finish(false); });
-        dlg.on('click', (e) => { if ($(e.target).hasClass('acu-edit-overlay')) finish(false); });
+        $('body').append(pop);
+
+        const anchor = anchorEl && anchorEl.jquery ? anchorEl[0] : anchorEl;
+        const reposition = () => {
+            const rect = anchor && anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : null;
+            if (!rect) { pop.css({ left: '20px', top: '20px' }); return; }
+            const pw = pop.outerWidth();
+            const ph = pop.outerHeight();
+            const vw = window.innerWidth || document.documentElement.clientWidth;
+            const vh = window.innerHeight || document.documentElement.clientHeight;
+            let left = rect.left + rect.width / 2 - pw / 2;
+            left = Math.max(8, Math.min(left, vw - pw - 8));
+            let top = rect.top - ph - 10;
+            let below = false;
+            if (top < 8) { top = rect.bottom + 10; below = true; }
+            if (top + ph > vh - 8) top = Math.max(8, vh - ph - 8);
+            pop.css({ left: left + 'px', top: top + 'px' });
+            const arrow = pop.find('.acu-mconf-arrow');
+            const ax = Math.max(6, Math.min(rect.left + rect.width / 2 - left - 5, pw - 16));
+            if (below) {
+                arrow.css({ left: ax + 'px', top: '-6px', bottom: 'auto', transform: 'rotate(45deg)' });
+            } else {
+                arrow.css({ left: ax + 'px', bottom: '-6px', top: 'auto', transform: 'rotate(225deg)' });
+            }
+        };
+        reposition();
+
+        const finish = (v) => {
+            try { pop.remove(); } catch (e) { /* ignore */ }
+            try { $(document).off('click.acuMconfOutside'); } catch (e) { /* ignore */ }
+            window.removeEventListener('resize', reposition, true);
+            window.removeEventListener('scroll', onScrollClose, true);
+            document.removeEventListener('keydown', onKey, true);
+            resolve(v);
+        };
+        const onScrollClose = () => finish(false);
+        const onKey = (e) => { if (e.key === 'Escape') finish(false); };
+        window.addEventListener('resize', reposition, true);
+        window.addEventListener('scroll', onScrollClose, true);
+        document.addEventListener('keydown', onKey, true);
+        pop.on('click', '#mconf-ok', (e) => { e.preventDefault(); e.stopPropagation(); finish(true); });
+        pop.on('click', '#mconf-cancel', (e) => { e.preventDefault(); e.stopPropagation(); finish(false); });
+        pop.on('click', (e) => { e.stopPropagation(); });
+        setTimeout(() => {
+            $(document).on('click.acuMconfOutside', (e) => {
+                if (!$(e.target).closest('.acu-manual-confirm-pop').length) finish(false);
+            });
+        }, 0);
     });
 
-    const runManualButton = async (btnId) => {
+    const runManualButton = async (btnId, anchorEl) => {
         const api = getCore().getDB();
         if (!api || typeof api.manualUpdate !== 'function') {
             uiHint('无法调用数据库更新接口', 'error');
             return;
         }
         const btn = getManualButtonById(btnId) || { label: '手动更新', batchSize: 3, contextDepth: 3, useAllTables: true, tableKeys: [] };
-        const confirmed = await showManualConfirm(btn);
+        const confirmed = await showManualConfirm(btn, anchorEl);
         if (!confirmed) return;
         try {
             if (btn.useAllTables) {
@@ -3940,7 +4004,7 @@ ${allTableNames.map(tName => {
             e.preventDefault(); e.stopPropagation();
             if (isEditingOrder) return;
             const btnId = $(this).data('manual-id');
-            await runManualButton(btnId);
+            await runManualButton(btnId, this);
         });
         $('#acu-btn-manual-config').off('click').on('click', function(e) {
             e.preventDefault(); e.stopPropagation();
