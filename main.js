@@ -9,7 +9,7 @@
 
     const SCRIPT_ID = 'acu_visualizer_ui_v20_pagination';
     // 版本号：儀表盤標題右側顯示，用於確認酒館是否已載入最新版
-    const ACU_UI_VERSION = 'v22.2';
+    const ACU_UI_VERSION = 'v22.3';
     const STORAGE_KEY_TABLE_ORDER = 'acu_table_order';
     const STORAGE_KEY_ACTION_ORDER = 'acu_action_order';
     const STORAGE_KEY_ACTIVE_TAB = 'acu_active_tab';
@@ -898,7 +898,7 @@
                 .acu-nav-container { display: flex; gap: 0; padding: 6px; background: var(--acu-bg-nav); border: 1px solid var(--acu-border); border-radius: 14px; box-shadow: 0 4px 15px var(--acu-shadow); position: relative; z-index: 20001; backdrop-filter: blur(5px); flex-direction: column; }
                 .acu-nav-tabs-area { display: grid; grid-template-columns: var(--acu-nav-cols, repeat(auto-fill, minmax(110px, 1fr))); gap: 6px; width: 100%; }
                 .acu-nav-separator { width: 100%; height: 1px; border-top: 1px dashed var(--acu-border); margin: 6px 0 6px 0; opacity: 0.6; }
-                .acu-nav-actions-area { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; justify-content: center; align-items: center; background: transparent; padding-top: 4px; }
+                .acu-nav-actions-area { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; justify-content: center; align-items: center; background: transparent; padding-top: 4px; position: relative; }
                 .acu-nav-btn { width: 100%; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 5px 2px; border: 1px solid var(--acu-border); background-origin: border-box; border-radius: 8px; background: var(--acu-btn-bg); color: var(--acu-text-main); font-weight: 600; font-size: 13px; cursor: pointer; transition: all 0.2s ease; user-select: none; text-align: center; white-space: nowrap; overflow: hidden; } .acu-nav-btn i { font-size: 0.85em; }
                 .acu-nav-btn span { overflow: hidden; text-overflow: ellipsis; }
                 .acu-nav-btn:hover { background: var(--acu-btn-hover); transform: translateY(-2px); }
@@ -911,7 +911,7 @@
                 .acu-action-btn:active { transform: translateY(0) scale(0.97); box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
                 .acu-action-btn.acu-manual-btn { flex: 0 1 auto; min-width: 38px; max-width: 140px; padding: 0 8px; gap: 4px; font-size: 11px; }
                 .acu-action-btn.acu-manual-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-                .acu-manual-confirm-pop { position: fixed !important; z-index: 2147483000; width: 300px; max-width: calc(100vw - 16px); box-sizing: border-box; background: var(--acu-bg-panel, #1e1e2e); border: 1px solid var(--acu-border, #444); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.45); padding: 11px 13px 9px; font-size: 12.5px; line-height: 1.65; color: var(--acu-text-main, #eee); animation: acuMconfIn .12s ease-out; }
+                .acu-manual-confirm-pop { position: absolute !important; z-index: 2147483000; width: 300px; max-width: calc(100vw - 16px); box-sizing: border-box; background: var(--acu-bg-panel, #1e1e2e); border: 1px solid var(--acu-border, #444); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.45); padding: 11px 13px 9px; font-size: 12.5px; line-height: 1.65; color: var(--acu-text-main, #eee); animation: acuMconfIn .12s ease-out; }
                 .acu-manual-confirm-pop .acu-mconf-arrow { position: absolute; width: 10px; height: 10px; background: var(--acu-bg-panel, #1e1e2e); border-left: 1px solid var(--acu-border, #444); border-top: 1px solid var(--acu-border, #444); }
                 .acu-manual-confirm-pop .acu-mconf-title { font-weight: 700; font-size: 13px; color: var(--acu-title-color, inherit); margin-bottom: 5px; display: flex; align-items: center; gap: 6px; }
                 .acu-manual-confirm-pop .acu-mconf-meta { color: var(--acu-text-sub, #aaa); font-size: 11.5px; }
@@ -2331,7 +2331,8 @@ ${allTableNames.map(tName => {
         if (!Number.isFinite(contextDepth) || contextDepth < 0) contextDepth = 3;
         const useAllTables = b.useAllTables !== false;
         const tableKeys = Array.isArray(b.tableKeys) ? b.tableKeys.map(String) : [];
-        return { id, label, icon, batchSize, contextDepth, useAllTables, tableKeys };
+        const tableNames = Array.isArray(b.tableNames) ? b.tableNames.map(String) : [];
+        return { id, label, icon, batchSize, contextDepth, useAllTables, tableKeys, tableNames };
     };
 
     const getManualButtons = () => {
@@ -2358,7 +2359,12 @@ ${allTableNames.map(tName => {
     const getAvailableTableOptions = () => {
         const out = [];
         try {
-            const raw = getTableData(false);
+            let raw = null;
+            try {
+                const api = getCore().getDB();
+                raw = api && api.exportTableAsJson ? api.exportTableAsJson() : null;
+            } catch (e) { raw = null; }
+            if (!raw || !Object.keys(raw).length) raw = getTableData(false);
             if (raw && typeof raw === 'object') {
                 for (const sheetId in raw) {
                     const s = raw[sheetId];
@@ -2524,11 +2530,18 @@ ${allTableNames.map(tName => {
         const opts = getAvailableTableOptions();
         const nameByKey = {};
         opts.forEach(o => { nameByKey[o.key] = o.name; });
+        const storedNames = Array.isArray(btn.tableNames) ? btn.tableNames : [];
+        const resolveTableName = (k, i) => {
+            if (nameByKey[k]) return nameByKey[k];
+            if (storedNames[i]) return storedNames[i];
+            if (/^sheet_/i.test(String(k))) return '未知表格（' + k + '）';
+            return k;
+        };
         let tableNames;
         if (btn.useAllTables) {
             tableNames = opts.map(o => o.name);
         } else if (Array.isArray(btn.tableKeys) && btn.tableKeys.length) {
-            tableNames = btn.tableKeys.map(k => nameByKey[k] || k);
+            tableNames = btn.tableKeys.map((k, i) => resolveTableName(k, i));
         } else {
             tableNames = [];
         }
@@ -2547,25 +2560,45 @@ ${allTableNames.map(tName => {
                     <button type="button" class="acu-mconf-btn acu-mconf-primary" id="mconf-ok">确定执行</button>
                 </div>
             </div>`);
-        $('body').append(pop);
-
+        // 以按钮所在父容器为定位基准，避免 fixed 受全屏/contain/跨文档影响而跑到左上角
         const anchor = anchorEl && anchorEl.jquery ? anchorEl[0] : anchorEl;
+        const adoc = (anchor && anchor.ownerDocument) || document;
+        const awin = adoc.defaultView || window;
+        try { adoc.querySelectorAll('.acu-manual-confirm-pop').forEach(n => { if (n !== pop[0]) n.remove(); }); } catch (e) { /* ignore */ }
+        let popHost = (anchor && anchor.parentNode) ? anchor.parentNode : null;
+        if (!popHost) popHost = adoc.body || document.body;
+        try {
+            const cs = awin.getComputedStyle(popHost);
+            if (cs && cs.position === 'static') popHost.style.position = 'relative';
+        } catch (e) { /* ignore */ }
+        try { popHost.appendChild(pop[0]); }
+        catch (e) {
+            try { $(adoc.body || document.body).append(pop); } catch (e2) { $('body').append(pop); }
+            popHost = pop[0].parentNode || popHost;
+        }
         const reposition = () => {
-            const rect = anchor && anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : null;
-            if (!rect) { pop.css({ left: '20px', top: '20px' }); return; }
-            const pw = pop.outerWidth();
-            const ph = pop.outerHeight();
-            const vw = window.innerWidth || document.documentElement.clientWidth;
-            const vh = window.innerHeight || document.documentElement.clientHeight;
-            let left = rect.left + rect.width / 2 - pw / 2;
-            left = Math.max(8, Math.min(left, vw - pw - 8));
-            let top = rect.top - ph - 10;
+            let pw = pop.outerWidth();
+            if (!pw) pw = 300;
+            let pr = null, br = null;
+            try { pr = popHost && popHost.getBoundingClientRect ? popHost.getBoundingClientRect() : null; } catch (e) { pr = null; }
+            try { br = anchor && anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : null; } catch (e) { br = null; }
+            if (!pr || !br) { pop.css({ left: '8px', top: '8px' }); return; }
+            const parentW = popHost.clientWidth || pw;
+            const maxW = Math.max(180, parentW - 8);
+            if (pw > maxW) { pop.css({ width: maxW + 'px', maxWidth: maxW + 'px' }); pw = maxW; }
+            const ph = pop.outerHeight() || 0;
+            const bLeft = br.left - pr.left;
+            const bTop = br.top - pr.top;
+            const bW = br.width || anchor.offsetWidth || 0;
+            const bH = br.height || anchor.offsetHeight || 0;
+            let left = bLeft + bW / 2 - pw / 2;
+            left = Math.max(4, Math.min(left, parentW - pw - 4));
+            let top = bTop - ph - 9;
             let below = false;
-            if (top < 8) { top = rect.bottom + 10; below = true; }
-            if (top + ph > vh - 8) top = Math.max(8, vh - ph - 8);
-            pop.css({ left: left + 'px', top: top + 'px' });
+            if (pr.top + top < 4) { top = bTop + bH + 9; below = true; }
+            pop.css({ left: left + 'px', top: top + 'px', bottom: 'auto', right: 'auto' });
             const arrow = pop.find('.acu-mconf-arrow');
-            const ax = Math.max(6, Math.min(rect.left + rect.width / 2 - left - 5, pw - 16));
+            const ax = Math.max(6, Math.min(bLeft + bW / 2 - left - 5, pw - 16));
             if (below) {
                 arrow.css({ left: ax + 'px', top: '-6px', bottom: 'auto', transform: 'rotate(45deg)' });
             } else {
@@ -2576,22 +2609,22 @@ ${allTableNames.map(tName => {
 
         const finish = (v) => {
             try { pop.remove(); } catch (e) { /* ignore */ }
-            try { $(document).off('click.acuMconfOutside'); } catch (e) { /* ignore */ }
-            window.removeEventListener('resize', reposition, true);
-            window.removeEventListener('scroll', onScrollClose, true);
-            document.removeEventListener('keydown', onKey, true);
+            try { $(adoc).off('click.acuMconfOutside'); } catch (e) { /* ignore */ }
+            try { awin.removeEventListener('resize', reposition, true); } catch (e) { /* ignore */ }
+            try { awin.removeEventListener('scroll', onScrollClose, true); } catch (e) { /* ignore */ }
+            try { adoc.removeEventListener('keydown', onKey, true); } catch (e) { /* ignore */ }
             resolve(v);
         };
         const onScrollClose = () => finish(false);
         const onKey = (e) => { if (e.key === 'Escape') finish(false); };
-        window.addEventListener('resize', reposition, true);
-        window.addEventListener('scroll', onScrollClose, true);
-        document.addEventListener('keydown', onKey, true);
+        awin.addEventListener('resize', reposition, true);
+        awin.addEventListener('scroll', onScrollClose, true);
+        adoc.addEventListener('keydown', onKey, true);
         pop.on('click', '#mconf-ok', (e) => { e.preventDefault(); e.stopPropagation(); finish(true); });
         pop.on('click', '#mconf-cancel', (e) => { e.preventDefault(); e.stopPropagation(); finish(false); });
         pop.on('click', (e) => { e.stopPropagation(); });
         setTimeout(() => {
-            $(document).on('click.acuMconfOutside', (e) => {
+            $(adoc).on('click.acuMconfOutside', (e) => {
                 if (!$(e.target).closest('.acu-manual-confirm-pop').length) finish(false);
             });
         }, 0);
@@ -2708,8 +2741,14 @@ ${allTableNames.map(tName => {
             if (!Number.isFinite(contextDepth) || contextDepth < 0) contextDepth = 3;
             const useAllTables = $card.find('.acu-manual-all').is(':checked');
             const tableKeys = [];
-            $card.find('.acu-manual-table-cb:checked').each(function () { tableKeys.push(String($(this).val())); });
-            return { id: base.id || ('mb_' + Math.random().toString(36).slice(2, 9)), label: label.slice(0, 40), icon, batchSize, contextDepth, useAllTables, tableKeys };
+            const tableNames = [];
+            $card.find('.acu-manual-table-cb:checked').each(function () {
+                const k = String($(this).val());
+                tableKeys.push(k);
+                const o = options.find(x => x.key === k);
+                tableNames.push(o ? o.name : k);
+            });
+            return { id: base.id || ('mb_' + Math.random().toString(36).slice(2, 9)), label: label.slice(0, 40), icon, batchSize, contextDepth, useAllTables, tableKeys, tableNames };
         };
         const syncDraftsFromDom = () => {
             drafts = $list.find('.acu-manual-card').map(function (i) { return readCard($(this), i); }).get();

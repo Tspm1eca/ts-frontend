@@ -1,24 +1,24 @@
 // 把這個檔案的內容貼進酒館腳本一次即可。
-// 熱更新原理：直接抓 raw 上的 main.js，用「內容雜湊」判斷有沒有變。
-// 完全不呼叫 api.github.com，因此不受「未登入 60 次/小時/IP」限制。
+// 熱更新原理：先用 GitHub API 解析 master 最新 commit SHA，再「按 SHA」抓 main.js。
+//   → 按 SHA 的網址是不可變的，新 commit 就是新網址，永遠不會讀到舊快取。
+//   → API 請求帶 ETag，內容沒變時回 304，不計入未登入 60 次/小時的限制。
+// 若 API 連不上，才退而用 jsDelivr 的 @master（push 後會自動清快取），最後才是 raw @master。
 (async function () {
     'use strict';
 
     const REPO = 'Tspm1eca/ts-frontend';
     const BRANCH = 'master';
     const FILE = 'main.js';
-    const MIN_INTERVAL_MS = 60 * 1000;   // 兩次檢查最短間隔，避免重複觸發時打爆來源
+    const MIN_INTERVAL_MS = 30 * 1000;   // 同一頁面內兩次檢查最短間隔（force 不受限）
     const TIMEOUT_MS = 15000;
     const book = window;
     const TAG = '[ACU UI]';
 
-    // 依序嘗試；前一個失敗才換下一個。
-    // raw 最新最快；jsDelivr 當備援（branch 有約 12 小時快取）；ghproxy 給連不上 GitHub 的網路。
-    const SOURCES = [
-        { name: 'raw', url: () => `https://raw.githubusercontent.com/${REPO}/${BRANCH}/${FILE}` },
-        { name: 'jsdelivr', url: () => `https://cdn.jsdelivr.net/gh/${REPO}@${BRANCH}/${FILE}` },
-        { name: 'ghproxy', url: () => `https://ghproxy.net/https://raw.githubusercontent.com/${REPO}/${BRANCH}/${FILE}` },
-    ];
+    // localStorage 可能被沙盒 iframe 禁用，全部包 try
+    const ls = {
+        get(k) { try { return book.localStorage.getItem(k); } catch (e) { return null; } },
+        set(k, v) { try { book.localStorage.setItem(k, v); } catch (e) { /* ignore */ } }
+    };
 
     const sigOf = (text) => {
         let h = 5381;
@@ -26,18 +26,29 @@
         return text.length + ':' + (h >>> 0).toString(16);
     };
 
-    const fetchText = async (url) => {
+    const fetchWithTimeout = async (url, opts) => {
         const ctl = new AbortController();
         const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
         try {
-            // no-cache = 每次都跟伺服器驗證；內容沒變時走 304，不會真的重下 267KB
-            const res = await fetch(url, { cache: 'no-cache', signal: ctl.signal });
-            if (!res.ok) throw new Error('HTTP ' + res.status);
-            return await res.text();
+            return await fetch(url, Object.assign({ signal: ctl.signal }, opts || {}));
         } finally {
             clearTimeout(timer);
         }
     };
+
+    const fetchText = async (url) => {
+        // no-store：連瀏覽器快取都不使用；搭配「按 SHA」網址可確保拿到該 commit 的真實內容
+        const res = await fetchWithTimeout(url, { cache: 'no-store' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return await res.text();
+    };
+
+    // 擋掉被 CDN／代理換成的錯誤頁（HTML、限流頁等），避免把垃圾丟進 eval
+    const looksLikeMainJs = (t) =>
+        !!t && t.length > 2000 &&
+        t.indexOf('ACUVisualizerUI') !== -1 &&
+        t.indexOf('<html') === -1 &&
+        t.indexOf('<!DOCTYPE') === -1;
 
     const uiExists = () => {
         if (book.ACUVisualizerUI) return true;
@@ -49,6 +60,42 @@
         }
     };
 
+    // 解析 master 最新 commit SHA（帶 ETag，304 免費）
+    async function resolveLatestSha() {
+        const headers = { 'Accept': 'application/vnd.github+json' };
+        const etag = ls.get('acu_ui_gh_etag');
+        if (etag) headers['If-None-Match'] = etag;
+
+        const res = await fetchWithTimeout(
+            `https://api.github.com/repos/${REPO}/commits/${BRANCH}`,
+            { cache: 'no-store', headers }
+        );
+        if (res.status === 304) return ls.get('acu_ui_gh_sha') || null;
+        if (!res.ok) throw new Error('API HTTP ' + res.status);
+
+        const newEtag = res.headers.get('etag');
+        if (newEtag) ls.set('acu_ui_gh_etag', newEtag);
+
+        const data = await res.json();
+        const sha = data && data.sha;
+        if (sha) ls.set('acu_ui_gh_sha', sha);
+        return sha || null;
+    }
+
+    function buildSources(sha) {
+        const list = [];
+        if (sha) {
+            // 首選：按 commit SHA 取，永久不可變、一定是最新
+            list.push({ name: 'jsdelivr@sha', url: `https://cdn.jsdelivr.net/gh/${REPO}@${sha}/${FILE}` });
+            list.push({ name: 'raw@sha', url: `https://raw.githubusercontent.com/${REPO}/${sha}/${FILE}` });
+        }
+        // 備援：jsDelivr 的 @master 在 push 後會清快取，通常比 raw 的分支快取新
+        list.push({ name: 'jsdelivr@master', url: `https://cdn.jsdelivr.net/gh/${REPO}@${BRANCH}/${FILE}` });
+        list.push({ name: 'raw@master', url: `https://raw.githubusercontent.com/${REPO}/${BRANCH}/${FILE}` });
+        list.push({ name: 'ghproxy', url: `https://ghproxy.net/https://raw.githubusercontent.com/${REPO}/${BRANCH}/${FILE}` });
+        return list;
+    }
+
     async function loadLatest(force) {
         if (book.__ACU_UI_LOADING__) return false;
 
@@ -58,18 +105,33 @@
         book.__ACU_UI_LOADING__ = true;
 
         try {
+            let sha = null;
+            try {
+                sha = await resolveLatestSha();
+            } catch (e) {
+                console.warn(`${TAG} 無法解析最新 commit，改用分支來源：`, e && e.message);
+            }
+
+            // 快路徑：SHA 沒變、而且 UI 已經在，直接略過（省下約 300KB 下載）
+            if (!force && sha && sha === book.__ACU_UI_SHA__ && book.__ACU_UI_SIG__ && uiExists()) {
+                console.info(`${TAG} 已是最新（${sha.slice(0, 7)}）`);
+                return false;
+            }
+
             let code = null;
             let used = null;
             let lastError = null;
 
-            for (const src of SOURCES) {
+            for (const src of buildSources(sha)) {
                 try {
-                    const text = await fetchText(src.url());
-                    if (text && text.length > 0) {
+                    const text = await fetchText(src.url);
+                    if (looksLikeMainJs(text)) {
                         code = text;
                         used = src.name;
                         break;
                     }
+                    lastError = new Error('內容看起來不是 main.js（可能被快取或代理攔截）');
+                    console.warn(`${TAG} 來源 ${src.name} 內容無效，換下一個`);
                 } catch (e) {
                     lastError = e;
                     console.warn(`${TAG} 來源 ${src.name} 失敗：`, e && e.message);
@@ -81,7 +143,8 @@
             }
 
             const sig = sigOf(code);
-            if (sig === book.__ACU_UI_SIG__) {
+            if (sig === book.__ACU_UI_SIG__ && uiExists()) {
+                if (sha) book.__ACU_UI_SHA__ = sha;
                 console.info(`${TAG} 已是最新 ${sig}`);
                 return false;
             }
@@ -94,7 +157,9 @@
             }
 
             book.__ACU_UI_SIG__ = sig;
-            console.info(`${TAG} 已載入 ${sig}（來源：${used}）`);
+            if (sha) book.__ACU_UI_SHA__ = sha;
+            book.__ACU_UI_LOADED_AT__ = now;
+            console.info(`${TAG} 已載入 ${sig}（來源：${used}${sha ? '，commit ' + sha.slice(0, 7) : ''}）`);
             return true;
         } finally {
             book.__ACU_UI_LOADING__ = false;
@@ -103,6 +168,15 @@
 
     // 手動強制重載：console 打 __ACU_UI_RELOAD__()
     book.__ACU_UI_RELOAD__ = () => loadLatest(true);
+    // 診斷目前狀態：console 打 __ACU_UI_STATUS__()
+    book.__ACU_UI_STATUS__ = () => ({
+        sig: book.__ACU_UI_SIG__ || null,
+        sha: book.__ACU_UI_SHA__ || null,
+        loadedAt: book.__ACU_UI_LOADED_AT__ || null,
+        lastCheck: book.__ACU_UI_LAST_CHECK__ || null,
+        uiExists: uiExists(),
+        apiEtag: ls.get('acu_ui_gh_etag') || null
+    });
 
     try {
         await loadLatest(false);
