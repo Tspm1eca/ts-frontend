@@ -9,7 +9,7 @@
 
     const SCRIPT_ID = 'acu_visualizer_ui_v20_pagination';
     // 版本号：儀表盤標題右側顯示，用於確認酒館是否已載入最新版
-    const ACU_UI_VERSION = 'v22.6';
+    const ACU_UI_VERSION = 'v22.7';
     const STORAGE_KEY_TABLE_ORDER = 'acu_table_order';
     const STORAGE_KEY_ACTION_ORDER = 'acu_action_order';
     const STORAGE_KEY_ACTIVE_TAB = 'acu_active_tab';
@@ -2513,6 +2513,15 @@ ${allTableNames.map(tName => {
         return fallback;
     };
 
+    // 取 Vue 应用根 VNode（不同构建下根实例可能挂在 _container._vnode 而非 _instance.subTree）
+    const getAppRootVNode = (app) => {
+        if (!app) return null;
+        try { if (app._instance && app._instance.subTree) return app._instance.subTree; } catch (e) { /* ignore */ }
+        try { if (app._container && app._container._vnode) return app._container._vnode; } catch (e) { /* ignore */ }
+        try { if (app._container && app._container.__vue_app__ && app._container.__vue_app__ === app) return app._container._vnode || null; } catch (e) { /* ignore */ }
+        return null;
+    };
+
     // 通过扩展已挂载的 Vue 应用，把「合并条数 / 最近层数」写入其内部设置（不改 index.js）
     const applyManualFillConfig = async (cfg) => {
         try {
@@ -2555,7 +2564,7 @@ ${allTableNames.map(tName => {
                 let api = null;
                 for (let i = 0; i < 60 && !api; i++) {
                     await new Promise(r => setTimeout(r, 25));
-                    api = findManualUpdateApiInVNode(app._instance && app._instance.subTree);
+                    api = findManualUpdateApiInVNode(getAppRootVNode(app));
                 }
                 if (!api) return { ok: false, code: 'no-api' };
                 let done = 0;
@@ -2604,7 +2613,7 @@ ${allTableNames.map(tName => {
                 let stores = [], hasRouter = false, hasRootShell = false, hasApi = false;
                 if (found) {
                     try { stores = Array.from(found.pinia._s.keys()); hasRouter = !!found.pinia._s.get('acu-v2-router'); hasRootShell = !!found.pinia._s.get('acu-v2-root-shell'); } catch (e) { /* ignore */ }
-                    try { hasApi = !!findManualUpdateApiInVNode(found.app._instance && found.app._instance.subTree); } catch (e) { /* ignore */ }
+                    try { hasApi = !!findManualUpdateApiInVNode(getAppRootVNode(found.app)); } catch (e) { /* ignore */ }
                 }
                 return { windowCount: wins.length, windows: info, foundApp: !!found, piniaStores: stores, hasRouter: hasRouter, hasRootShell: hasRootShell, hasManualUpdateApi: hasApi };
             } catch (e) { return { error: String(e) }; }
