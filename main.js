@@ -9,7 +9,7 @@
 
     const SCRIPT_ID = 'acu_visualizer_ui_v20_pagination';
     // 版本号：儀表盤標題右側顯示，用於確認酒館是否已載入最新版
-    const ACU_UI_VERSION = 'v22.5';
+    const ACU_UI_VERSION = 'v22.6';
     const STORAGE_KEY_TABLE_ORDER = 'acu_table_order';
     const STORAGE_KEY_ACTION_ORDER = 'acu_action_order';
     const STORAGE_KEY_ACTIVE_TAB = 'acu_active_tab';
@@ -2395,6 +2395,14 @@ ${allTableNames.map(tName => {
                 if (su && su.manualUpdate && typeof su.manualUpdate.setManualBatchSize === 'function') {
                     return su.manualUpdate;
                 }
+                // 某些构建/页面上 setter 直接暴露在 setupState 上
+                if (su && typeof su.setManualBatchSize === 'function' && typeof su.setManualContextDepth === 'function') {
+                    return { setManualBatchSize: su.setManualBatchSize, setManualContextDepth: su.setManualContextDepth };
+                }
+                const ex = comp.exposed;
+                if (ex && typeof ex.setManualBatchSize === 'function' && typeof ex.setManualContextDepth === 'function') {
+                    return { setManualBatchSize: ex.setManualBatchSize, setManualContextDepth: ex.setManualContextDepth };
+                }
                 if (comp.subTree) {
                     const r = findManualUpdateApiInVNode(comp.subTree);
                     if (r) return r;
@@ -2421,17 +2429,31 @@ ${allTableNames.map(tName => {
     // 解析可访问的最外层宿主窗口（与扩展 resolveAcuHost 的逻辑一致，兼容多层 iframe）
     const resolveAcuHostWindows = () => {
         const wins = [];
+        const seen = new Set();
+        const addWin = (w) => {
+            if (!w || seen.has(w)) return;
+            try { const d = w.document; if (!d || !d.body) return; } catch (e) { return; }
+            seen.add(w);
+            wins.push(w);
+        };
+        // 1) 自身 + 向上 parent 链
         try {
             let w = window;
             while (w) {
-                try {
-                    const d = w.document;
-                    if (!d || !d.body) break;
-                    wins.push(w);
-                    const p = w.parent;
-                    if (!p || p === w) break;
-                    w = p;
-                } catch (e) { break; }
+                addWin(w);
+                let p;
+                try { p = w.parent; } catch (e) { break; }
+                if (!p || p === w) break;
+                w = p;
+            }
+        } catch (e) { /* ignore */ }
+        // 2) 所有已收集窗口的 frames（扩展可能挂在与本 UI 同级的 iframe 里）
+        try {
+            for (let i = 0; i < wins.length && i < 24; i++) {
+                let fr;
+                try { fr = wins[i].frames; } catch (e) { continue; }
+                if (!fr) continue;
+                for (let j = 0; j < fr.length; j++) { try { addWin(fr[j]); } catch (e) { /* ignore */ } }
             }
         } catch (e) { /* ignore */ }
         if (!wins.length) wins.push(window);
@@ -2465,26 +2487,56 @@ ${allTableNames.map(tName => {
                 if (candidates.length) break;
             }
         }
+        let fallback = null;
         for (const c of candidates) {
             try {
                 const gp = c.app && c.app.config && c.app.config.globalProperties;
-                const pinia = gp && gp.$pinia;
-                if (pinia && pinia._s && pinia._s.get('acu-v2-router') && pinia._s.get('acu-v2-root-shell')) {
-                    return { el: c.el, app: c.app, pinia: pinia };
+                let pinia = gp && gp.$pinia;
+                if (!pinia && c.app && c.app._context && c.app._context.provides) {
+                    try {
+                        const keys = Reflect.ownKeys(c.app._context.provides);
+                        for (let ki = 0; ki < keys.length; ki++) {
+                            const v = c.app._context.provides[keys[ki]];
+                            if (v && v._s && typeof v._s.get === 'function') { pinia = v; break; }
+                        }
+                    } catch (e) { /* ignore */ }
+                }
+                if (pinia && pinia._s && typeof pinia._s.get === 'function') {
+                    const cand = { el: c.el, app: c.app, pinia: pinia };
+                    let hasAcuRouter = false;
+                    try { hasAcuRouter = !!pinia._s.get('acu-v2-router'); } catch (e) { /* ignore */ }
+                    if (hasAcuRouter) return cand; // 优先返回扩展自己的应用
+                    if (!fallback) fallback = cand;
                 }
             } catch (e) { /* ignore */ }
         }
-        return null;
+        return fallback;
     };
 
     // 通过扩展已挂载的 Vue 应用，把「合并条数 / 最近层数」写入其内部设置（不改 index.js）
     const applyManualFillConfig = async (cfg) => {
         try {
-            const found = findAcuV2App();
-            if (!found) return false;
+            let found = findAcuV2App();
+            if (!found) {
+                // 面板若尚未挂载，尝试通过扩展公开 API 触发一次挂载（随后会立刻隐藏）
+                try {
+                    const wins = resolveAcuHostWindows();
+                    for (let i = 0; i < wins.length; i++) {
+                        try {
+                            const api = wins[i].AutoCardUpdaterV2API;
+                            if (api && typeof api.open === 'function') { api.open(); break; }
+                        } catch (e) { /* ignore */ }
+                    }
+                } catch (e) { /* ignore */ }
+                for (let i = 0; i < 20 && !found; i++) {
+                    await new Promise(r => setTimeout(r, 50));
+                    found = findAcuV2App();
+                }
+            }
+            if (!found) return { ok: false, code: 'no-app' };
             const el = found.el, app = found.app, pinia = found.pinia;
-            const router = pinia._s.get('acu-v2-router');
-            if (!router || typeof router.setActivePage !== 'function') return false;
+            const router = pinia && pinia._s ? pinia._s.get('acu-v2-router') : null;
+            if (!router || typeof router.setActivePage !== 'function') return { ok: false, code: 'no-router' };
             const rootShell = pinia._s.get('acu-v2-root-shell');
             const prevPage = router.activePageId;
             const prevOpen = rootShell ? rootShell.isOpen : undefined;
@@ -2498,14 +2550,17 @@ ${allTableNames.map(tName => {
                     await new Promise(r => setTimeout(r, 25));
                     api = findManualUpdateApiInVNode(app._instance && app._instance.subTree);
                 }
-                if (!api) return false;
+                if (!api) return { ok: false, code: 'no-api' };
+                let done = 0;
                 if (cfg.contextDepth !== null && cfg.contextDepth !== undefined && typeof api.setManualContextDepth === 'function') {
                     api.setManualContextDepth(Math.max(0, Math.floor(Number(cfg.contextDepth) || 0)));
+                    done++;
                 }
                 if (cfg.batchSize !== null && cfg.batchSize !== undefined && typeof api.setManualBatchSize === 'function') {
                     api.setManualBatchSize(Math.max(1, Math.floor(Number(cfg.batchSize) || 1)));
+                    done++;
                 }
-                return true;
+                return done > 0 ? { ok: true } : { ok: false, code: 'no-setter' };
             } finally {
                 try { if (prevPage !== undefined && prevPage !== null) router.setActivePage(prevPage); } catch (e) { /* ignore */ }
                 try { if (rootShell && typeof rootShell.setOpen === 'function' && prevOpen === false) rootShell.setOpen(false); } catch (e) { /* ignore */ }
@@ -2513,22 +2568,43 @@ ${allTableNames.map(tName => {
             }
         } catch (e) {
             console.warn('[ACU UI] applyManualFillConfig 失败:', e);
-            return false;
+            return { ok: false, code: 'exc:' + (e && e.message ? e.message : String(e)) };
         }
     };
 
     // 调试用：控制台执行 __acuManualDebug() 可查看 hook 连接情况
     try {
-        window.__acuManualDebug = () => {
+        const manualDebug = () => {
             try {
-                const found = findAcuV2App();
                 const wins = resolveAcuHostWindows();
-                const srcs = wins.map(w => { try { return (w.location && w.location.href) || 'about:blank'; } catch (e) { return '(cross-origin)'; } });
-                const stores = found ? Array.from(found.pinia._s.keys()) : [];
-                const hasApi = found ? !!findManualUpdateApiInVNode(found.app._instance && found.app._instance.subTree) : false;
-                return { windowCount: wins.length, sources: srcs, foundApp: !!found, piniaStores: stores, hasManualUpdateApi: hasApi };
+                const info = wins.map(w => {
+                    let href = '(cross-origin)', appEl = null, vueEls = 0;
+                    try { href = (w.location && w.location.href) || 'about:blank'; } catch (e) { /* ignore */ }
+                    try {
+                        const d = w.document;
+                        if (d) {
+                            const el = d.getElementById('acu-app-v2');
+                            appEl = el ? { exists: true, hasVueApp: !!el.__vue_app__, display: el.style.display } : { exists: false };
+                            const all = d.querySelectorAll('*');
+                            let c = 0;
+                            for (let i = 0; i < all.length; i++) { if (all[i].__vue_app__) c++; }
+                            vueEls = c;
+                        }
+                    } catch (e) { appEl = { err: String(e) }; }
+                    return { href: href, appEl: appEl, vueEls: vueEls };
+                });
+                const found = findAcuV2App();
+                let stores = [], hasRouter = false, hasRootShell = false, hasApi = false;
+                if (found) {
+                    try { stores = Array.from(found.pinia._s.keys()); hasRouter = !!found.pinia._s.get('acu-v2-router'); hasRootShell = !!found.pinia._s.get('acu-v2-root-shell'); } catch (e) { /* ignore */ }
+                    try { hasApi = !!findManualUpdateApiInVNode(found.app._instance && found.app._instance.subTree); } catch (e) { /* ignore */ }
+                }
+                return { windowCount: wins.length, windows: info, foundApp: !!found, piniaStores: stores, hasRouter: hasRouter, hasRootShell: hasRootShell, hasManualUpdateApi: hasApi };
             } catch (e) { return { error: String(e) }; }
         };
+        const wins = resolveAcuHostWindows();
+        for (let i = 0; i < wins.length; i++) { try { wins[i].__acuManualDebug = manualDebug; } catch (e) { /* ignore */ } }
+        try { window.__acuManualDebug = manualDebug; } catch (e) { /* ignore */ }
     } catch (e) { /* ignore */ }
 
     // 执行前的二次确认：以「气泡」形式显示在触发按钮正上方，避免屏幕居中打扰
@@ -2674,13 +2750,14 @@ ${allTableNames.map(tName => {
             }
         } catch (e) { console.warn('[ACU UI] 设置填表范围失败:', e); }
 
-        let applied = false;
-        try { applied = await applyManualFillConfig({ batchSize: btn.batchSize, contextDepth: btn.contextDepth }); }
+        let applyRes = null;
+        try { applyRes = await applyManualFillConfig({ batchSize: btn.batchSize, contextDepth: btn.contextDepth }); }
         catch (e) { console.warn('[ACU UI] 应用手动填表配置失败:', e); }
+        const applied = !!(applyRes && applyRes.ok);
         if (!applied && !manualBatchWarned) {
             manualBatchWarned = true;
             try { console.info('[ACU UI] 手动填表 hook 连接诊断：', window.__acuManualDebug ? window.__acuManualDebug() : 'n/a'); } catch (e) { /* ignore */ }
-            uiHint('未能连接扩展的“手动填表”面板，本次改用扩展当前的全局合并条数 / 层数设置。', 'warning');
+            uiHint('未能连接扩展的“手动填表”面板，本次改用扩展当前的全局合并条数 / 层数设置。（诊断码：' + ((applyRes && applyRes.code) || 'unknown') + '）', 'warning');
         }
 
         try { await api.manualUpdate({ confirm: false }); }
