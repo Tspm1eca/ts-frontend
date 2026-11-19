@@ -9,7 +9,7 @@
 
     const SCRIPT_ID = 'acu_visualizer_ui_v20_pagination';
     // 版本号：儀表盤標題右側顯示，用於確認酒館是否已載入最新版
-    const ACU_UI_VERSION = 'v21.8';
+    const ACU_UI_VERSION = 'v22.0';
     const STORAGE_KEY_TABLE_ORDER = 'acu_table_order';
     const STORAGE_KEY_ACTION_ORDER = 'acu_action_order';
     const STORAGE_KEY_ACTIVE_TAB = 'acu_active_tab';
@@ -2392,18 +2392,71 @@ ${allTableNames.map(tName => {
         return null;
     };
 
+    // 解析可访问的最外层宿主窗口（与扩展 resolveAcuHost 的逻辑一致，兼容多层 iframe）
+    const resolveAcuHostWindows = () => {
+        const wins = [];
+        try {
+            let w = window;
+            while (w) {
+                try {
+                    const d = w.document;
+                    if (!d || !d.body) break;
+                    wins.push(w);
+                    const p = w.parent;
+                    if (!p || p === w) break;
+                    w = p;
+                } catch (e) { break; }
+            }
+        } catch (e) { /* ignore */ }
+        if (!wins.length) wins.push(window);
+        return wins;
+    };
+
+    // 在宿主文档中定位扩展已挂载的 Vue 应用及其实例（容错：直接 id 优先，其次扫描带 __vue_app__ 的元素）
+    const findAcuV2App = () => {
+        const wins = resolveAcuHostWindows();
+        const candidates = [];
+        for (let i = wins.length - 1; i >= 0; i--) { // 最外层优先
+            let doc;
+            try { doc = wins[i].document; } catch (e) { continue; }
+            if (!doc) continue;
+            try {
+                const el = doc.getElementById('acu-app-v2');
+                if (el && el.__vue_app__) candidates.push({ el, app: el.__vue_app__ });
+            } catch (e) { /* ignore */ }
+        }
+        if (!candidates.length) {
+            for (let i = wins.length - 1; i >= 0; i--) {
+                let doc;
+                try { doc = wins[i].document; } catch (e) { continue; }
+                if (!doc || !doc.querySelectorAll) continue;
+                let nodes;
+                try { nodes = doc.querySelectorAll('*'); } catch (e) { continue; }
+                for (let k = 0; k < nodes.length; k++) {
+                    const el = nodes[k];
+                    if (el && el.__vue_app__) candidates.push({ el, app: el.__vue_app__ });
+                }
+                if (candidates.length) break;
+            }
+        }
+        for (const c of candidates) {
+            try {
+                const gp = c.app && c.app.config && c.app.config.globalProperties;
+                const pinia = gp && gp.$pinia;
+                if (pinia && pinia._s && pinia._s.get('acu-v2-router') && pinia._s.get('acu-v2-root-shell')) {
+                    return { el: c.el, app: c.app, pinia: pinia };
+                }
+            } catch (e) { /* ignore */ }
+        }
+        return null;
+    };
+
     // 通过扩展已挂载的 Vue 应用，把「合并条数 / 最近层数」写入其内部设置（不改 index.js）
     const applyManualFillConfig = async (cfg) => {
         try {
-            const w = window.parent || window;
-            const doc = w.document;
-            if (!doc) return false;
-            const el = doc.getElementById('acu-app-v2');
-            if (!el || !el.__vue_app__) return false;
-            const app = el.__vue_app__;
-            const gp = app.config && app.config.globalProperties;
-            const pinia = gp && gp.$pinia;
-            if (!pinia || !pinia._s) return false;
+            const found = findAcuV2App();
+            if (!found) return false;
+            const el = found.el, app = found.app, pinia = found.pinia;
             const router = pinia._s.get('acu-v2-router');
             if (!router || typeof router.setActivePage !== 'function') return false;
             const rootShell = pinia._s.get('acu-v2-root-shell');
@@ -2438,13 +2491,57 @@ ${allTableNames.map(tName => {
         }
     };
 
+    // 调试用：控制台执行 __acuManualDebug() 可查看 hook 连接情况
+    try {
+        window.__acuManualDebug = () => {
+            try {
+                const found = findAcuV2App();
+                const wins = resolveAcuHostWindows();
+                const srcs = wins.map(w => { try { return (w.location && w.location.href) || 'about:blank'; } catch (e) { return '(cross-origin)'; } });
+                const stores = found ? Array.from(found.pinia._s.keys()) : [];
+                const hasApi = found ? !!findManualUpdateApiInVNode(found.app._instance && found.app._instance.subTree) : false;
+                return { windowCount: wins.length, sources: srcs, foundApp: !!found, piniaStores: stores, hasManualUpdateApi: hasApi };
+            } catch (e) { return { error: String(e) }; }
+        };
+    } catch (e) { /* ignore */ }
+
+    // 执行前的二次确认，避免误触
+    const showManualConfirm = (btn) => new Promise((resolve) => {
+        const { $ } = getCore();
+        if (!$) { try { resolve(window.confirm('确定执行「' + (btn.label || '手动更新') + '」吗？')); } catch (e) { resolve(true); } return; }
+        $('.acu-manual-confirm-overlay').remove();
+        const cfg = getConfig();
+        const scope = btn.useAllTables ? '全部表格' : (Array.isArray(btn.tableKeys) && btn.tableKeys.length ? ('已选 ' + btn.tableKeys.length + ' 张表') : '未选择表格');
+        const dlg = $(`
+            <div class="acu-edit-overlay acu-manual-confirm-overlay">
+                <div class="acu-edit-dialog acu-theme-${cfg.theme}" style="max-width:420px;height:auto;max-height:70vh;">
+                    <div class="acu-edit-title"><i class="fa-solid fa-circle-question"></i> 再次确定</div>
+                    <div class="acu-settings-content" style="padding:18px;font-size:13px;color:var(--acu-text-main);line-height:1.8;">
+                        确定要执行「<b>${escapeHtml(btn.label || '手动更新')}</b>」吗？<br>
+                        <span style="color:var(--acu-text-sub);font-size:12px;">合并条数：${btn.batchSize} ｜ 最近层数：${btn.contextDepth} ｜ 表格范围：${escapeHtml(scope)}</span>
+                    </div>
+                    <div class="acu-dialog-btns">
+                        <button type="button" class="acu-dialog-btn" id="mconf-cancel">取消</button>
+                        <button type="button" class="acu-dialog-btn" id="mconf-ok" style="color:var(--acu-highlight);font-weight:bold;">确定执行</button>
+                    </div>
+                </div>
+            </div>`);
+        $('body').append(dlg);
+        const finish = (v) => { try { dlg.remove(); } catch (e) { /* ignore */ } resolve(v); };
+        dlg.on('click', '#mconf-ok', (e) => { e.preventDefault(); e.stopPropagation(); finish(true); });
+        dlg.on('click', '#mconf-cancel', (e) => { e.preventDefault(); e.stopPropagation(); finish(false); });
+        dlg.on('click', (e) => { if ($(e.target).hasClass('acu-edit-overlay')) finish(false); });
+    });
+
     const runManualButton = async (btnId) => {
         const api = getCore().getDB();
         if (!api || typeof api.manualUpdate !== 'function') {
             uiHint('无法调用数据库更新接口', 'error');
             return;
         }
-        const btn = getManualButtonById(btnId) || { batchSize: 3, contextDepth: 3, useAllTables: true, tableKeys: [] };
+        const btn = getManualButtonById(btnId) || { label: '手动更新', batchSize: 3, contextDepth: 3, useAllTables: true, tableKeys: [] };
+        const confirmed = await showManualConfirm(btn);
+        if (!confirmed) return;
         try {
             if (btn.useAllTables) {
                 if (api.clearManualSelectedTables) api.clearManualSelectedTables();
@@ -2460,6 +2557,7 @@ ${allTableNames.map(tName => {
         catch (e) { console.warn('[ACU UI] 应用手动填表配置失败:', e); }
         if (!applied && !manualBatchWarned) {
             manualBatchWarned = true;
+            try { console.info('[ACU UI] 手动填表 hook 连接诊断：', window.__acuManualDebug ? window.__acuManualDebug() : 'n/a'); } catch (e) { /* ignore */ }
             uiHint('未能连接扩展的“手动填表”面板，本次改用扩展当前的全局合并条数 / 层数设置。', 'warning');
         }
 
@@ -2474,6 +2572,7 @@ ${allTableNames.map(tName => {
         const options = getAvailableTableOptions();
         let drafts = getManualButtons().map(b => ({ ...b, tableKeys: Array.isArray(b.tableKeys) ? [...b.tableKeys] : [] }));
         const inputStyle = 'padding:5px 8px;border:1px solid var(--acu-border);border-radius:7px;background:var(--acu-input-bg);color:var(--acu-text-main);font-size:12px;box-sizing:border-box;width:100%;';
+        const MANUAL_ICON_CHOICES = ['fa-bolt','fa-wand-magic-sparkles','fa-wand-sparkles','fa-dice','fa-dice-d20','fa-scroll','fa-book','fa-book-open','fa-user','fa-users','fa-heart','fa-star','fa-crown','fa-shield-halved','fa-fire','fa-dragon','fa-ghost','fa-mask','fa-flask','fa-gem','fa-coins','fa-map','fa-compass','fa-flag','fa-clock','fa-calendar','fa-list','fa-table','fa-pen-nib','fa-feather','fa-bell','fa-cloud','fa-moon','fa-sun','fa-skull','fa-hand-fist','fa-hat-wizard','fa-magnifying-glass','fa-rotate','fa-broom','fa-cubes','fa-database','fa-sliders','fa-check','fa-plus','fa-gear','fa-lightbulb'];
 
         const cardHtml = (b) => `
             <div class="acu-manual-card" style="border:1px solid var(--acu-border);border-radius:10px;padding:12px;margin-bottom:12px;background:var(--acu-bg-panel);">
@@ -2482,8 +2581,19 @@ ${allTableNames.map(tName => {
                     <input class="acu-manual-label" value="${escapeHtml(b.label)}" placeholder="按钮名称" style="flex:1;${inputStyle}">
                     <button type="button" class="acu-manual-del" title="删除此按钮" style="background:none;border:none;cursor:pointer;color:#e74c3c;font-size:14px;padding:4px;"><i class="fa-solid fa-trash"></i></button>
                 </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
-                    <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--acu-text-sub);">图标（FontAwesome）<input class="acu-manual-icon" value="${escapeHtml(b.icon)}" placeholder="fa-bolt" style="${inputStyle}"></label>
+                <div style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--acu-text-sub);margin-bottom:10px;">
+                    <span>图标（点击选择）</span>
+                    <button type="button" class="acu-icon-pick" style="display:flex;align-items:center;gap:6px;padding:5px 8px;border:1px solid var(--acu-border);border-radius:7px;background:var(--acu-input-bg);color:var(--acu-text-main);font-size:12px;cursor:pointer;width:100%;max-width:280px;">
+                        <i class="fa-solid ${(b.icon || 'fa-bolt')} acu-icon-pick-preview"></i>
+                        <span class="acu-icon-pick-text" style="flex:1;text-align:left;">选择图标</span>
+                        <i class="fa-solid fa-chevron-down" style="opacity:.55;font-size:10px;"></i>
+                    </button>
+                    <input type="hidden" class="acu-manual-icon" value="${escapeHtml(b.icon || 'fa-bolt')}">
+                    <div class="acu-icon-palette" style="display:none;grid-template-columns:repeat(8,1fr);gap:2px;max-height:150px;overflow:auto;padding:6px;border:1px solid var(--acu-border);border-radius:8px;background:var(--acu-bg-panel);">
+                        ${MANUAL_ICON_CHOICES.map(ic => `<button type="button" class="acu-icon-choice" data-icon="${ic}" title="${ic}" style="border:1px solid transparent;background:none;border-radius:6px;padding:5px 0;cursor:pointer;color:var(--acu-text-main);font-size:15px;"><i class="fa-solid ${ic}"></i></button>`).join('')}
+                    </div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
                     <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--acu-text-sub);">每 N 条 AI 回复合并为一次填表<input type="number" min="1" step="1" class="acu-manual-batch" value="${b.batchSize}" style="${inputStyle}"></label>
                     <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--acu-text-sub);">手动处理最近 N 层（0 = 全部）<input type="number" min="0" step="1" class="acu-manual-depth" value="${b.contextDepth}" style="${inputStyle}"></label>
                 </div>
@@ -2503,7 +2613,7 @@ ${allTableNames.map(tName => {
                     <div class="acu-settings-content" style="flex:1;overflow-y:auto;padding:16px;">
                         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;">
                             <button type="button" class="acu-dialog-btn" id="mgr-add" style="color:var(--acu-highlight);font-weight:bold;"><i class="fa-solid fa-plus"></i> 新增按钮</button>
-                            <span style="font-size:11px;color:var(--acu-text-sub);text-align:right;line-height:1.4;">每个按钮点击时，按其各自的合并条数 / 最近层数 / 表格范围执行一次手动填表。</span>
+                            <span style="font-size:11px;color:var(--acu-text-sub);text-align:right;line-height:1.4;">每个按钮点击时，按其各自的合并条数 / 最近层数 / 表格范围执行一次手动填表。「图标」点击后从弹出的图标面板中选择。</span>
                         </div>
                         <div id="mgr-list"></div>
                     </div>
@@ -2541,9 +2651,19 @@ ${allTableNames.map(tName => {
             drafts = $list.find('.acu-manual-card').map(function (i) { return readCard($(this), i); }).get();
         };
 
-        dialog.on('input change', '.acu-manual-icon', function () {
-            const val = String($(this).val() || '').trim();
-            $(this).closest('.acu-manual-card').find('.acu-manual-preview').attr('class', 'fa-solid ' + (/^fa-/.test(val) ? val : 'fa-bolt') + ' acu-manual-preview');
+        dialog.on('click', '.acu-icon-pick', function (e) {
+            e.preventDefault(); e.stopPropagation();
+            const $pal = $(this).closest('.acu-manual-card').find('.acu-icon-palette');
+            $pal.css('display', $pal.css('display') === 'none' ? 'grid' : 'none');
+        });
+        dialog.on('click', '.acu-icon-choice', function (e) {
+            e.preventDefault(); e.stopPropagation();
+            const ic = String($(this).data('icon') || 'fa-bolt');
+            const $card = $(this).closest('.acu-manual-card');
+            $card.find('.acu-manual-icon').val(ic);
+            $card.find('.acu-icon-pick-preview').attr('class', 'fa-solid ' + ic + ' acu-icon-pick-preview');
+            $card.find('.acu-manual-preview').attr('class', 'fa-solid ' + ic + ' acu-manual-preview');
+            $card.find('.acu-icon-palette').css('display', 'none');
         });
         dialog.on('change', '.acu-manual-all', function () {
             $(this).closest('.acu-manual-card').find('.acu-manual-tables').css('display', this.checked ? 'none' : 'grid');
