@@ -9,7 +9,7 @@
 
     const SCRIPT_ID = 'acu_visualizer_ui_v20_pagination';
     // 版本号：儀表盤標題右側顯示，用於確認酒館是否已載入最新版
-    const ACU_UI_VERSION = 'v21.4';
+    const ACU_UI_VERSION = 'v21.5';
     const STORAGE_KEY_TABLE_ORDER = 'acu_table_order';
     const STORAGE_KEY_ACTION_ORDER = 'acu_action_order';
     const STORAGE_KEY_ACTIVE_TAB = 'acu_active_tab';
@@ -1144,18 +1144,15 @@
                 .acu-order-controls.visible { display: block; }
                 .acu-nav-container.editing-order .acu-nav-btn, .acu-nav-container.editing-order .acu-action-btn { border: 1px dashed #f0ad4e; cursor: grab; opacity: 0.8; }
                 .acu-divider { width: 1px; height: 18px; background: var(--acu-border); margin: 0 6px; }
-                .acu-nav-container.collapsed > *:not(#acu-btn-toggle):not(.acu-collapsed-text) { display: none !important; }
-                .acu-nav-container.collapsed { width: 100%; justify-content: center; cursor: pointer; padding: 8px 0; flex-direction: column; gap: 0; height: auto; transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1); }
-                .acu-nav-container.collapsed.acu-collapse-pill { width: auto !important; border-radius: 50px; padding: 8px 25px; margin-top: 5px; box-shadow: 0 5px 15px var(--acu-shadow); background: var(--acu-bg-nav); border: 1px solid var(--acu-border); }
+                .acu-nav-container.collapsed > *:not(.acu-nav-actions-area) { display: none !important; }
+                .acu-nav-container.collapsed { width: 100%; justify-content: center; cursor: pointer; padding: 8px 6px; flex-direction: column; gap: 0; height: auto; transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1); }
+                .acu-nav-container.collapsed.acu-collapse-pill { width: auto !important; border-radius: 50px; padding: 8px 12px; margin-top: 5px; box-shadow: 0 5px 15px var(--acu-shadow); background: var(--acu-bg-nav); border: 1px solid var(--acu-border); }
                 .acu-nav-container.collapsed.acu-collapse-pill.acu-pill-center { align-self: center; }
                 .acu-nav-container.collapsed.acu-collapse-pill.acu-pill-left { align-self: flex-start; margin-left: 15px; }
                 .acu-nav-container.collapsed.acu-collapse-pill.acu-pill-right { align-self: flex-end; margin-right: 15px; }
                 .acu-nav-container.collapsed.acu-collapse-pill:hover { transform: scale(1.05); border-color: var(--acu-highlight); color: var(--acu-highlight); }
-                .acu-nav-container.collapsed.acu-collapse-pill #acu-btn-toggle { display: none !important; }
-                .acu-nav-container.collapsed.acu-collapse-pill .acu-collapsed-text { display: block; font-size: 12px; margin: 0; font-weight: bold; }
-                .acu-nav-container.collapsed #acu-btn-toggle { background: transparent; border: none; width: 100%; pointer-events: none; height: 24px; }
-                .acu-collapsed-text { display: none; font-size: 12px; color: var(--acu-text-sub); margin-top: 2px; text-align: center; width: 100%; pointer-events: none; font-weight: bold; letter-spacing: 1px; }
-                .acu-nav-container.collapsed .acu-collapsed-text { display: block; }
+                .acu-nav-container.collapsed.acu-collapse-pill .acu-nav-actions-area { width: auto; }
+                .acu-nav-container.collapsed #acu-btn-toggle { background: transparent; border: none; width: auto; pointer-events: none; height: 24px; }
 
                 .acu-height-drag-handle { cursor: ns-resize !important; touch-action: none; }
                 .acu-height-drag-handle.active { color: var(--acu-highlight); background: var(--acu-table-hover); }
@@ -2361,7 +2358,6 @@ ${allTableNames.map(tName => {
             const actionBtns = {
                 'acu-btn-open-db': `<button class="acu-action-btn" id="acu-btn-open-db" title="打开数据库首页"><i class="fa-solid fa-database"></i></button>`,
                 'acu-btn-open-visualizer': `<button class="acu-action-btn" id="acu-btn-open-visualizer" title="打开表格编辑器"><i class="fa-solid fa-table-cells"></i></button>`,
-                'acu-btn-manual-update': `<button class="acu-action-btn" id="acu-btn-manual-update" title="立即手动更新"><i class="fa-solid fa-bolt"></i></button>`,
                 'acu-btn-settings': `<button class="acu-action-btn" id="acu-btn-settings" title="全能设置"><i class="fa-solid fa-cog"></i></button>`,
                 'acu-btn-toggle': `<button class="acu-action-btn" id="acu-btn-toggle" title="${isCollapsed ? '展开' : '收起'}"><i class="fa-solid ${isCollapsed ? 'fa-chevron-up' : 'fa-chevron-down'}"></i></button>`
             };
@@ -2445,7 +2441,6 @@ ${allTableNames.map(tName => {
                         <div class="acu-nav-actions-area">
                             ${navActionsHtml}
                         </div>
-                        <div class="acu-collapsed-text">展开面板</div>
                     </div>
                 </div>`;
             insertHtmlToPage(html);
@@ -3509,15 +3504,6 @@ ${allTableNames.map(tName => {
                 window.toastr.error('无法调用表格编辑器接口');
             }
         });
-        $('#acu-btn-manual-update').off('click').on('click', async function(e) {
-            e.preventDefault(); e.stopPropagation();
-            if (isEditingOrder) return;
-            const api = getCore().getDB();
-            if (api && api.manualUpdate) {
-                await api.manualUpdate();
-            } else if (window.toastr) window.toastr.error('无法调用数据库更新接口');
-        });
-
         $('#send_but').off('click.acu_opt_hide').on('click.acu_opt_hide', function() {
              hideOptionsUntilUpdate = true;
              $('.acu-embedded-options-container').hide();
