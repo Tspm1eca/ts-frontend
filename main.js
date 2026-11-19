@@ -9,7 +9,7 @@
 
     const SCRIPT_ID = 'acu_visualizer_ui_v20_pagination';
     // 版本号：儀表盤標題右側顯示，用於確認酒館是否已載入最新版
-    const ACU_UI_VERSION = 'v22.9';
+    const ACU_UI_VERSION = 'v23.0';
     const STORAGE_KEY_TABLE_ORDER = 'acu_table_order';
     const STORAGE_KEY_ACTION_ORDER = 'acu_action_order';
     const STORAGE_KEY_ACTIVE_TAB = 'acu_active_tab';
@@ -2860,7 +2860,6 @@ ${allTableNames.map(tName => {
                 <div class="acu-edit-dialog acu-theme-${config.theme}" style="max-width:780px;height:86vh;max-height:86vh;">
                     <div class="acu-edit-title" style="display:flex;justify-content:space-between;align-items:center;">
                         <span><i class="fa-solid fa-bolt"></i> 管理手动更新按钮</span>
-                        <button type="button" id="mgr-close" style="background:none;border:none;cursor:pointer;color:var(--acu-text-sub);font-size:13px;">完成</button>
                     </div>
                     <div class="acu-settings-content" style="flex:1;overflow-y:auto;padding:16px;">
                         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;">
@@ -2947,7 +2946,7 @@ ${allTableNames.map(tName => {
             drafts.push({ id: 'mb_' + Math.random().toString(36).slice(2, 9), label: '手动更新', icon: 'fa-bolt', batchSize: 3, contextDepth: 3, useAllTables: true, tableKeys: [] });
             renderList();
         });
-        dialog.on('click', '#mgr-close, #mgr-cancel', function (e) { e.preventDefault(); dialog.remove(); });
+        dialog.on('click', '#mgr-cancel', function (e) { e.preventDefault(); dialog.remove(); });
         dialog.on('click', '#mgr-save', function (e) {
             e.preventDefault();
             syncDraftsFromDom();

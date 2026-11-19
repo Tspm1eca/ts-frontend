@@ -1,7 +1,7 @@
 # ACU Visualizer UI — 手動更新按鍵 / index.js Hook 實作與除錯指南
 
 > 適用檔案：`main.js`（本倉庫 `Tspm1eca/ts-frontend`）
-> 文件對應版本：**main.js v22.9**（約 5163 行 / ~322 KB）
+> 文件對應版本：**main.js v23.0**（約 5162 行 / ~322 KB）
 > 目的：當上游 `index.js`（AutoCardUpdater 擴展本體）更新後若本功能出錯，任何 LLM 可依本文件**快速定位壞在哪個「錨點」並修好**。
 
 ---
@@ -445,6 +445,7 @@ git ls-remote origin -h refs/heads/master   # 確認遠端 sha
 | v22.7 | 01ad64f | **根因修正**：根 VNode 在 `app._container._vnode`，改 `getAppRootVNode` |
 | v22.8 | 2113b4b | **移除全局降級**：batch/depth 任一設不到就**中止填表**；兩 setter 都成功才算 ok |
 | v22.9 | 95712ec | `uiHint` 改在最外層宿主 window 顯示（修 iframe 內 toastr 看不到），加橫幅後備 |
+| v23.0 | — | 移除管理器右上角無意義的「完成」按鈕（僅保留底部「儲存/取消」） |
 
 ---
 
