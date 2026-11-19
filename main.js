@@ -2504,7 +2504,7 @@ ${allTableNames.map(tName => {
                 if (pinia && pinia._s && typeof pinia._s.get === 'function') {
                     const cand = { el: c.el, app: c.app, pinia: pinia };
                     let hasAcuRouter = false;
-                    try { hasAcuRouter = !!pinia._s.get('acu-v2-router'); } catch (e) { /* ignore */ }
+                    try { hasAcuRouter = !!pinia._s.get('acu-v2-router') || !!pinia._s.get('acu-v2-root-shell') || (c.el && c.el.id === 'acu-app-v2'); } catch (e) { /* ignore */ }
                     if (hasAcuRouter) return cand; // 优先返回扩展自己的应用
                     if (!fallback) fallback = cand;
                 }
@@ -2535,18 +2535,25 @@ ${allTableNames.map(tName => {
             }
             if (!found) return { ok: false, code: 'no-app' };
             const el = found.el, app = found.app, pinia = found.pinia;
-            const router = pinia && pinia._s ? pinia._s.get('acu-v2-router') : null;
-            if (!router || typeof router.setActivePage !== 'function') return { ok: false, code: 'no-router' };
-            const rootShell = pinia._s.get('acu-v2-root-shell');
-            const prevPage = router.activePageId;
-            const prevOpen = rootShell ? rootShell.isOpen : undefined;
+            if (!pinia || !pinia._s || typeof pinia._s.get !== 'function') return { ok: false, code: 'no-pinia' };
+            let rootShell = pinia._s.get('acu-v2-root-shell');
             const prevDisplay = el.style.display;
+            const prevOpen = rootShell ? rootShell.isOpen : undefined;
+            let router = pinia._s.get('acu-v2-router');
+            let prevPage;
             try {
                 el.style.display = 'none';
+                // 先打开外壳：pinia store 是懒创建的，只有外壳渲染后 router store 才会存在并挂载页面
                 if (rootShell && typeof rootShell.setOpen === 'function' && !rootShell.isOpen) rootShell.setOpen(true);
+                for (let i = 0; i < 24 && (!router || typeof router.setActivePage !== 'function'); i++) {
+                    await new Promise(r => setTimeout(r, 25));
+                    router = pinia._s.get('acu-v2-router');
+                }
+                if (!router || typeof router.setActivePage !== 'function') return { ok: false, code: 'no-router' };
+                prevPage = router.activePageId;
                 router.setActivePage('form-fill');
                 let api = null;
-                for (let i = 0; i < 40 && !api; i++) {
+                for (let i = 0; i < 60 && !api; i++) {
                     await new Promise(r => setTimeout(r, 25));
                     api = findManualUpdateApiInVNode(app._instance && app._instance.subTree);
                 }
@@ -2562,7 +2569,7 @@ ${allTableNames.map(tName => {
                 }
                 return done > 0 ? { ok: true } : { ok: false, code: 'no-setter' };
             } finally {
-                try { if (prevPage !== undefined && prevPage !== null) router.setActivePage(prevPage); } catch (e) { /* ignore */ }
+                try { if (router && typeof router.setActivePage === 'function' && prevPage !== undefined && prevPage !== null) router.setActivePage(prevPage); } catch (e) { /* ignore */ }
                 try { if (rootShell && typeof rootShell.setOpen === 'function' && prevOpen === false) rootShell.setOpen(false); } catch (e) { /* ignore */ }
                 el.style.display = prevDisplay;
             }
