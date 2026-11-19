@@ -2566,6 +2566,9 @@ ${allTableNames.map(tName => {
         const awin = adoc.defaultView || window;
         try { adoc.querySelectorAll('.acu-manual-confirm-pop').forEach(n => { if (n !== pop[0]) n.remove(); }); } catch (e) { /* ignore */ }
         let popHost = (anchor && anchor.parentNode) ? anchor.parentNode : null;
+        if (!popHost) {
+            try { popHost = adoc.querySelector('.acu-nav-actions-area') || null; } catch (e) { popHost = null; }
+        }
         if (!popHost) popHost = adoc.body || document.body;
         try {
             const cs = awin.getComputedStyle(popHost);
@@ -2582,7 +2585,12 @@ ${allTableNames.map(tName => {
             let pr = null, br = null;
             try { pr = popHost && popHost.getBoundingClientRect ? popHost.getBoundingClientRect() : null; } catch (e) { pr = null; }
             try { br = anchor && anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : null; } catch (e) { br = null; }
-            if (!pr || !br) { pop.css({ left: '8px', top: '8px' }); return; }
+            if (!br) {
+                if (popHost && adoc.body && popHost === adoc.body) { pop.css({ left: '8px', top: '8px' }); }
+                else { const h0 = pop.outerHeight() || 0; pop.css({ left: '4px', top: (-h0 - 9) + 'px', right: 'auto', bottom: 'auto' }); }
+                return;
+            }
+            if (!pr) { pop.css({ left: '8px', top: '8px' }); return; }
             const parentW = popHost.clientWidth || pw;
             const maxW = Math.max(180, parentW - 8);
             if (pw > maxW) { pop.css({ width: maxW + 'px', maxWidth: maxW + 'px' }); pw = maxW; }
@@ -2637,7 +2645,14 @@ ${allTableNames.map(tName => {
             return;
         }
         const btn = getManualButtonById(btnId) || { label: '手动更新', batchSize: 3, contextDepth: 3, useAllTables: true, tableKeys: [] };
-        const confirmed = await showManualConfirm(btn, anchorEl);
+        let anchorElResolved = anchorEl;
+        if (!anchorElResolved) {
+            try {
+                const safeId = String(btnId).replace(/["\\]/g, '\\$&');
+                anchorElResolved = document.querySelector('.acu-manual-btn[data-manual-id="' + safeId + '"]');
+            } catch (e) { anchorElResolved = null; }
+        }
+        const confirmed = await showManualConfirm(btn, anchorElResolved);
         if (!confirmed) return;
         try {
             if (btn.useAllTables) {
