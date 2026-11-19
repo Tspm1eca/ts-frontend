@@ -9,7 +9,7 @@
 
     const SCRIPT_ID = 'acu_visualizer_ui_v20_pagination';
     // 版本号：儀表盤標題右側顯示，用於確認酒館是否已載入最新版
-    const ACU_UI_VERSION = 'v21.6';
+    const ACU_UI_VERSION = 'v21.7';
     const STORAGE_KEY_TABLE_ORDER = 'acu_table_order';
     const STORAGE_KEY_ACTION_ORDER = 'acu_action_order';
     const STORAGE_KEY_ACTIVE_TAB = 'acu_active_tab';
@@ -903,7 +903,7 @@
                 .acu-nav-btn.active { background: var(--acu-btn-active-bg); color: var(--acu-btn-active-text); box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
                 .acu-action-btn { position: relative; flex: 1 1 0; min-width: 0; height: 34px; display: flex; align-items: center; justify-content: center; gap: 6px; background: var(--acu-btn-bg); border: 1px solid var(--acu-border); border-radius: 10px; color: var(--acu-text-sub); cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: background .2s ease, color .2s ease, border-color .2s ease, box-shadow .2s ease, transform .15s ease; font-size: 12px; line-height: 1; }
                 .acu-action-btn i { font-size: 14px; transition: transform .2s ease; }
-                .acu-nav-actions-area #acu-btn-toggle { flex: 0 0 46px; }
+                .acu-nav-actions-area #acu-btn-toggle, .acu-nav-actions-area #acu-btn-settings { flex: 0 0 46px; }
                 .acu-action-btn:hover { background: var(--acu-btn-hover); color: var(--acu-highlight); border-color: var(--acu-highlight); transform: translateY(-1px); box-shadow: 0 4px 12px var(--acu-highlight-bg); }
                 .acu-action-btn:hover i { transform: scale(1.12); }
                 .acu-action-btn:active { transform: translateY(0) scale(0.97); box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
@@ -1156,7 +1156,7 @@
                 .acu-nav-container.collapsed.acu-collapse-pill.acu-pill-right { align-self: flex-end; margin-right: 15px; }
                 .acu-nav-container.collapsed.acu-collapse-pill:hover { transform: scale(1.05); border-color: var(--acu-highlight); color: var(--acu-highlight); }
                 .acu-nav-container.collapsed.acu-collapse-pill .acu-nav-actions-area { width: auto; }
-                .acu-nav-container.collapsed #acu-btn-toggle { flex: 0 0 44px; width: auto; height: 34px; pointer-events: auto; }
+                .acu-nav-container.collapsed #acu-btn-toggle, .acu-nav-container.collapsed #acu-btn-settings { flex: 0 0 44px; width: auto; height: 34px; pointer-events: auto; }
 
                 .acu-height-drag-handle { cursor: ns-resize !important; touch-action: none; }
                 .acu-height-drag-handle.active { color: var(--acu-highlight); background: var(--acu-table-hover); }
@@ -1219,7 +1219,8 @@
                          background: var(--acu-btn-bg);
                          margin: 0 !important;
                     }
-                    .acu-nav-actions-area #acu-btn-toggle {
+                    .acu-nav-actions-area #acu-btn-toggle,
+                    .acu-nav-actions-area #acu-btn-settings {
                          flex: 0 0 44px !important;
                     }
                     .acu-option-panel {
