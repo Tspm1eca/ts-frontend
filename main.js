@@ -2683,6 +2683,19 @@ ${allTableNames.map(tName => {
         const config = getConfig();
         const options = getAvailableTableOptions();
         let drafts = getManualButtons().map(b => ({ ...b, tableKeys: Array.isArray(b.tableKeys) ? [...b.tableKeys] : [] }));
+        // 若当前聊天读不到表格数据，用草稿里已保存的 tableKeys 补齐选项，避免表格勾选列表空白
+        try {
+            const knownKeys = new Set(options.map(o => o.key));
+            drafts.forEach(d => {
+                (Array.isArray(d.tableKeys) ? d.tableKeys : []).forEach((k, i) => {
+                    if (!knownKeys.has(k)) {
+                        knownKeys.add(k);
+                        const nm = (Array.isArray(d.tableNames) && d.tableNames[i]) || ('未知表格（' + k + '）');
+                        options.push({ key: k, name: nm });
+                    }
+                });
+            });
+        } catch (e) { /* ignore */ }
         const inputStyle = 'padding:5px 8px;border:1px solid var(--acu-border);border-radius:7px;background:var(--acu-input-bg);color:var(--acu-text-main);font-size:12px;box-sizing:border-box;width:100%;';
         const MANUAL_ICON_CHOICES = ['fa-bolt','fa-wand-magic-sparkles','fa-wand-sparkles','fa-dice','fa-dice-d20','fa-scroll','fa-book','fa-book-open','fa-user','fa-users','fa-heart','fa-star','fa-crown','fa-shield-halved','fa-fire','fa-dragon','fa-ghost','fa-mask','fa-flask','fa-gem','fa-coins','fa-map','fa-compass','fa-flag','fa-clock','fa-calendar','fa-list','fa-table','fa-pen-nib','fa-feather','fa-bell','fa-cloud','fa-moon','fa-sun','fa-skull','fa-hand-fist','fa-hat-wizard','fa-magnifying-glass','fa-rotate','fa-broom','fa-cubes','fa-database','fa-sliders','fa-check','fa-plus','fa-gear','fa-lightbulb'];
 
