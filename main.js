@@ -9,7 +9,7 @@
 
     const SCRIPT_ID = 'acu_visualizer_ui_v20_pagination';
     // 版本号：儀表盤標題右側顯示，用於確認酒館是否已載入最新版
-    const ACU_UI_VERSION = 'v23.0';
+    const ACU_UI_VERSION = 'v23.1';
     const STORAGE_KEY_TABLE_ORDER = 'acu_table_order';
     const STORAGE_KEY_ACTION_ORDER = 'acu_action_order';
     const STORAGE_KEY_ACTIVE_TAB = 'acu_active_tab';
@@ -2827,8 +2827,9 @@ ${allTableNames.map(tName => {
         const MANUAL_ICON_CHOICES = ['fa-bolt','fa-wand-magic-sparkles','fa-wand-sparkles','fa-dice','fa-dice-d20','fa-scroll','fa-book','fa-book-open','fa-user','fa-users','fa-heart','fa-star','fa-crown','fa-shield-halved','fa-fire','fa-dragon','fa-ghost','fa-mask','fa-flask','fa-gem','fa-coins','fa-map','fa-compass','fa-flag','fa-clock','fa-calendar','fa-list','fa-table','fa-pen-nib','fa-feather','fa-bell','fa-cloud','fa-moon','fa-sun','fa-skull','fa-hand-fist','fa-hat-wizard','fa-magnifying-glass','fa-rotate','fa-broom','fa-cubes','fa-database','fa-sliders','fa-check','fa-plus','fa-gear','fa-lightbulb'];
 
         const cardHtml = (b) => `
-            <div class="acu-manual-card" style="border:1px solid var(--acu-border);border-radius:10px;padding:12px;margin-bottom:12px;background:var(--acu-bg-panel);">
+            <div class="acu-manual-card" data-draft-id="${escapeHtml(b.id || '')}" style="border:1px solid var(--acu-border);border-radius:10px;padding:12px;margin-bottom:12px;background:var(--acu-bg-panel);">
                 <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                    <i class="fa-solid fa-grip-vertical acu-manual-drag" title="按住上下拖动调整顺序" style="cursor:grab;color:var(--acu-text-sub);font-size:15px;padding:2px 2px;flex:0 0 auto;touch-action:none;-webkit-user-select:none;user-select:none;"></i>
                     <i class="fa-solid ${b.icon || 'fa-bolt'} acu-manual-preview" style="font-size:16px;width:20px;text-align:center;color:var(--acu-highlight);"></i>
                     <input class="acu-manual-label" value="${escapeHtml(b.label)}" placeholder="按钮名称" style="flex:1;${inputStyle}">
                     <button type="button" class="acu-manual-del" title="删除此按钮" style="background:none;border:none;cursor:pointer;color:#e74c3c;font-size:14px;padding:4px;"><i class="fa-solid fa-trash"></i></button>
@@ -2857,6 +2858,12 @@ ${allTableNames.map(tName => {
 
         const dialog = $(`
             <div class="acu-edit-overlay acu-manual-mgr-overlay">
+                <style>
+                    .acu-manual-card.acu-manual-dragging { opacity: .92; box-shadow: 0 10px 28px rgba(0,0,0,.35); border-color: var(--acu-highlight) !important; }
+                    .acu-manual-dragging-active { user-select: none; -webkit-user-select: none; }
+                    .acu-manual-dragging-active .acu-manual-card { transition: box-shadow .1s ease; }
+                    .acu-manual-drag:hover, .acu-manual-card.acu-manual-dragging .acu-manual-drag { color: var(--acu-highlight); cursor: grabbing; }
+                </style>
                 <div class="acu-edit-dialog acu-theme-${config.theme}" style="max-width:780px;height:86vh;max-height:86vh;">
                     <div class="acu-edit-title" style="display:flex;justify-content:space-between;align-items:center;">
                         <span><i class="fa-solid fa-bolt"></i> 管理手动更新按钮</span>
@@ -2885,7 +2892,8 @@ ${allTableNames.map(tName => {
         $('body').append(dialog);
 
         const readCard = ($card, idx) => {
-            const base = drafts[idx] || {};
+            const draftId = $card.attr('data-draft-id');
+            const base = (draftId && drafts.find(d => d.id === draftId)) || drafts[idx] || {};
             const label = String($card.find('.acu-manual-label').val() == null ? '' : $card.find('.acu-manual-label').val()).trim() || '手动更新';
             let icon = String($card.find('.acu-manual-icon').val() == null ? '' : $card.find('.acu-manual-icon').val()).trim();
             if (!/^fa-/.test(icon)) icon = 'fa-bolt';
@@ -2946,16 +2954,83 @@ ${allTableNames.map(tName => {
             drafts.push({ id: 'mb_' + Math.random().toString(36).slice(2, 9), label: '手动更新', icon: 'fa-bolt', batchSize: 3, contextDepth: 3, useAllTables: true, tableKeys: [] });
             renderList();
         });
-        dialog.on('click', '#mgr-cancel', function (e) { e.preventDefault(); dialog.remove(); });
+        // ===== 拖拽排序：按住卡片左侧手柄上下拖动即可调整位置 =====
+        let dragCardEl = null;
+        let dragStartY = 0;
+        const $scrollBox = dialog.find('.acu-settings-content');
+
+        const onCardDragMove = (ev) => {
+            if (!dragCardEl) return;
+            // 靠近上下边缘时自动滚动
+            const box = $scrollBox[0];
+            if (box) {
+                const br = box.getBoundingClientRect();
+                if (ev.clientY < br.top + 28) box.scrollTop -= 14;
+                else if (ev.clientY > br.bottom - 28) box.scrollTop += 14;
+            }
+            const others = $list.children('.acu-manual-card').get().filter(c => c !== dragCardEl);
+            let refEl = null;
+            for (let i = 0; i < others.length; i++) {
+                const r = others[i].getBoundingClientRect();
+                if (ev.clientY < r.top + r.height / 2) { refEl = others[i]; break; }
+            }
+            if (refEl) {
+                if (refEl.previousElementSibling !== dragCardEl) $list[0].insertBefore(dragCardEl, refEl);
+            } else if ($list[0].lastElementChild !== dragCardEl) {
+                $list[0].appendChild(dragCardEl);
+            }
+            if (ev.cancelable) ev.preventDefault();
+        };
+
+        const onCardDragEnd = () => {
+            if (dragCardEl) { $(dragCardEl).removeClass('acu-manual-dragging'); dragCardEl = null; }
+            $list.removeClass('acu-manual-dragging-active');
+            document.removeEventListener('pointermove', onCardDragMove, true);
+            document.removeEventListener('pointerup', onCardDragEnd, true);
+            document.removeEventListener('pointercancel', onCardDragEnd, true);
+        };
+
+        dialog.on('pointerdown', '.acu-manual-drag', function (e) {
+            if (e.pointerType === 'mouse' && e.button !== 0) return;
+            const $card = $(this).closest('.acu-manual-card');
+            if (!$card.length || $list.children('.acu-manual-card').length < 2) return;
+            e.preventDefault();
+            e.stopPropagation();
+            dragCardEl = $card[0];
+            dragStartY = e.clientY;
+            $card.addClass('acu-manual-dragging');
+            $list.addClass('acu-manual-dragging-active');
+            document.addEventListener('pointermove', onCardDragMove, true);
+            document.addEventListener('pointerup', onCardDragEnd, true);
+            document.addEventListener('pointercancel', onCardDragEnd, true);
+        });
+
+        dialog.on('click', '#mgr-cancel', function (e) { e.preventDefault(); onCardDragEnd(); dialog.remove(); });
         dialog.on('click', '#mgr-save', function (e) {
             e.preventDefault();
+            onCardDragEnd();
             syncDraftsFromDom();
             saveManualButtons(drafts);
+            // 让主界面的手动按钮顺序与卡片顺序保持一致（若存在自定义按钮顺序则同步手动按钮的相对次序）
+            try {
+                const saved = getSavedActionOrder();
+                if (Array.isArray(saved) && saved.length) {
+                    const manualKeys = drafts.map(d => 'acu-manual-btn-' + d.id);
+                    const manualSet = new Set(manualKeys);
+                    let firstManualPos = -1;
+                    for (let i = 0; i < saved.length; i++) { if (manualSet.has(saved[i])) { firstManualPos = i; break; } }
+                    if (firstManualPos >= 0) {
+                        const before = saved.slice(0, firstManualPos).filter(k => !manualSet.has(k));
+                        const after = saved.slice(firstManualPos).filter(k => !manualSet.has(k));
+                        saveActionOrder(before.concat(manualKeys).concat(after));
+                    }
+                }
+            } catch (err) { /* ignore */ }
             dialog.remove();
             uiHint('已保存手动更新按钮', 'success');
             renderInterface(false);
         });
-        dialog.on('click', function (e) { if ($(e.target).hasClass('acu-edit-overlay')) dialog.remove(); });
+        dialog.on('click', function (e) { if ($(e.target).hasClass('acu-edit-overlay')) { onCardDragEnd(); dialog.remove(); } });
     };
 
     const renderInterface = (forceRefresh = false) => {
