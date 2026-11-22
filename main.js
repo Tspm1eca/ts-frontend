@@ -9,7 +9,7 @@
 
     const SCRIPT_ID = 'acu_visualizer_ui_v20_pagination';
     // 版本号：儀表盤標題右側顯示，用於確認酒館是否已載入最新版
-    const ACU_UI_VERSION = 'v23.1';
+    const ACU_UI_VERSION = 'v23.2';
     const STORAGE_KEY_TABLE_ORDER = 'acu_table_order';
     const STORAGE_KEY_ACTION_ORDER = 'acu_action_order';
     const STORAGE_KEY_ACTIVE_TAB = 'acu_active_tab';
@@ -2829,7 +2829,7 @@ ${allTableNames.map(tName => {
         const cardHtml = (b) => `
             <div class="acu-manual-card" data-draft-id="${escapeHtml(b.id || '')}" style="border:1px solid var(--acu-border);border-radius:10px;padding:12px;margin-bottom:12px;background:var(--acu-bg-panel);">
                 <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-                    <i class="fa-solid fa-grip-vertical acu-manual-drag" title="按住上下拖动调整顺序" style="cursor:grab;color:var(--acu-text-sub);font-size:15px;padding:2px 2px;flex:0 0 auto;touch-action:none;-webkit-user-select:none;user-select:none;"></i>
+                    <i class="fa-solid fa-grip-vertical acu-manual-drag" title="按住上下拖动调整顺序" style="cursor:grab;color:var(--acu-text-sub);font-size:16px;padding:5px 4px;margin:-5px 0 -5px -2px;border-radius:6px;flex:0 0 auto;touch-action:none;-webkit-user-select:none;user-select:none;"></i>
                     <i class="fa-solid ${b.icon || 'fa-bolt'} acu-manual-preview" style="font-size:16px;width:20px;text-align:center;color:var(--acu-highlight);"></i>
                     <input class="acu-manual-label" value="${escapeHtml(b.label)}" placeholder="按钮名称" style="flex:1;${inputStyle}">
                     <button type="button" class="acu-manual-del" title="删除此按钮" style="background:none;border:none;cursor:pointer;color:#e74c3c;font-size:14px;padding:4px;"><i class="fa-solid fa-trash"></i></button>
@@ -2871,7 +2871,7 @@ ${allTableNames.map(tName => {
                     <div class="acu-settings-content" style="flex:1;overflow-y:auto;padding:16px;">
                         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;">
                             <button type="button" class="acu-dialog-btn" id="mgr-add" style="color:var(--acu-highlight);font-weight:bold;"><i class="fa-solid fa-plus"></i> 新增按钮</button>
-                            <span style="font-size:11px;color:var(--acu-text-sub);text-align:right;line-height:1.4;">每个按钮点击时，按其各自的合并条数 / 最近层数 / 表格范围执行一次手动填表。「图标」点击后从弹出的图标面板中选择。</span>
+                            <span style="font-size:11px;color:var(--acu-text-sub);text-align:right;line-height:1.4;">按住卡片任意空白处（或左侧手柄）上下拖动即可调整顺序；触控时请按住左侧手柄拖动。每个按钮点击时，按其各自的合并条数 / 最近层数 / 表格范围执行一次手动填表。「图标」点击后从弹出的图标面板中选择。</span>
                         </div>
                         <div id="mgr-list"></div>
                     </div>
@@ -2954,9 +2954,8 @@ ${allTableNames.map(tName => {
             drafts.push({ id: 'mb_' + Math.random().toString(36).slice(2, 9), label: '手动更新', icon: 'fa-bolt', batchSize: 3, contextDepth: 3, useAllTables: true, tableKeys: [] });
             renderList();
         });
-        // ===== 拖拽排序：按住卡片左侧手柄上下拖动即可调整位置 =====
+        // ===== 拖拽排序：按住卡片空白处（或左侧手柄）上下拖动即可调整位置 =====
         let dragCardEl = null;
-        let dragStartY = 0;
         const $scrollBox = dialog.find('.acu-settings-content');
 
         const onCardDragMove = (ev) => {
@@ -2990,16 +2989,24 @@ ${allTableNames.map(tName => {
             document.removeEventListener('pointercancel', onCardDragEnd, true);
         };
 
-        dialog.on('pointerdown', '.acu-manual-drag', function (e) {
+        dialog.on('pointerdown', '.acu-manual-card', function (e) {
+            const $card = $(this);
+            if ($list.children('.acu-manual-card').length < 2) return;
             if (e.pointerType === 'mouse' && e.button !== 0) return;
-            const $card = $(this).closest('.acu-manual-card');
-            if (!$card.length || $list.children('.acu-manual-card').length < 2) return;
+            const fromHandle = $(e.target).closest('.acu-manual-drag').length > 0;
+            if (!fromHandle) {
+                // 觸控時僅限手柄拖動，避免和列表滾動互相搶事件
+                if (e.pointerType === 'touch') return;
+                // 從可互動控件（輸入框、按鈕、勾選、圖標面板等）開始時不觸發拖拽
+                if ($(e.target).closest('input, button, a, textarea, select, label, .acu-icon-palette').length) return;
+            }
             e.preventDefault();
             e.stopPropagation();
             dragCardEl = $card[0];
-            dragStartY = e.clientY;
             $card.addClass('acu-manual-dragging');
             $list.addClass('acu-manual-dragging-active');
+            // 說明：不使用 setPointerCapture —— 拖拽過程中卡片會被 insertBefore 移動，
+            // 元素重排可能導致指標捕獲被瀏覽器釋放；改用 document 捕獲階段監聽更穩定。
             document.addEventListener('pointermove', onCardDragMove, true);
             document.addEventListener('pointerup', onCardDragEnd, true);
             document.addEventListener('pointercancel', onCardDragEnd, true);
